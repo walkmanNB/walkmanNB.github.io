@@ -1,0 +1,219 @@
+/* 基础重置和全局样式 */
+:root {
+    --primary-color: #3498db; /* 主题蓝色 */
+    --secondary-color: #2c3e50; /* 深色背景/文字 */
+    --light-bg: #ecf0f1; /* 浅灰色背景 */
+    --text-color: #333;
+    --card-bg: #ffffff;
+    --shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Poppins', sans-serif; /* 使用引入的字体 */
+    line-height: 1.6;
+    color: var(--text-color);
+    background-color: #f4f7f9;
+    scroll-behavior: smooth;
+}
+
+/* ==================== 头部/英雄区 (Hero Section) ==================== */
+.hero {
+    background: linear-gradient(135deg, var(--primary-color), #2980b9);
+    color: white;
+    padding: 60px 20px;
+    text-align: center;
+}
+
+.profile-container {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.profile-picture {
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 5px solid rgba(255, 255, 255, 0.3); /* 添加白色边框 */
+    margin-bottom: 20px;
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
+}
+
+.hero h1 {
+    font-size: 3em;
+    margin-bottom: 10px;
+    font-weight: 700;
+}
+
+.subtitle {
+    font-size: 1.3em;
+    opacity: 0.9;
+    margin-top: 20px;
+}
+
+/* ==================== 通用容器和卡片样式 (Container & Card) ==================== */
+.container {
+    max-width: 1100px;
+    margin: 40px auto;
+    padding: 0 20px;
+}
+
+.card {
+    background-color: var(--card-bg);
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    margin-bottom: 30px;
+}
+
+.section-padding {
+    padding: 40px 0;
+}
+
+h2 {
+    color: var(--secondary-color);
+    border-bottom: 3px solid var(--primary-color);
+    display: inline-block;
+    padding-bottom: 5px;
+    margin-bottom: 25px;
+    font-size: 1.8em;
+}
+
+/* ==================== 关于我部分 (About Section) ==================== */
+#about .content-box p {
+    margin-bottom: 15px;
+    text-align: justify;
+}
+
+
+/* ==================== 项目展示区 (Project Grid) ==================== */
+.skill-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    justify-content: center;
+}
+
+.skill-item {
+    background-color: var(--light-bg);
+    padding: 15px 30px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    position: relative; /* 关键：为伪元素定位做准备 */
+    overflow: hidden; /* 确保内容不会溢出，实现平滑过渡 */
+}
+
+.skill-item:hover {
+    background-color: var(--primary-color);
+    color: white;
+    transform: translateY(-3px);
+    box-shadow: 0 6px 12px rgba(52, 152, 219, 0.4);
+}
+
+/* 添加填充效果的伪元素：模拟蓄力/填满 */
+.skill-item::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%; /* 从左侧完全隐藏 */
+    height: 100%;
+    width: 100%;
+    background-color: rgba(52, 152, 219, 0.3); /* 半透明蓝色填充色，与主色调匹配 */
+    transition: left 0.4s ease; /* 平滑过渡时间 */
+    z-index: 1;
+}
+
+/* 当悬停时，让伪元素从左向右移动，模拟“填满”效果 */
+.skill-item:hover::after {
+    left: 100%; /* 移动到完全覆盖的位置 */
+}
+
+
+/* ==================== 联系方式 (Contact Section) ==================== */
+#contact p {
+    margin-bottom: 30px;
+    text-align: center;
+}
+
+.social-links {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+}
+
+.link-button {
+    background-color: var(--primary-color);
+    color: white;
+    padding: 12px 25px;
+    text-decoration: none;
+    border-radius: 30px;
+    transition: all 0.3s ease; /* 保持原有过渡效果 */
+    font-weight: 600;
+    position: relative;
+    overflow: hidden;
+    z-index: 1;
+}
+
+/* 添加填充效果的伪元素：模拟蓄力/填满 */
+.link-button::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%; /* 从左侧完全隐藏 */
+    height: 100%;
+    width: 100%;
+    background-color: rgba(255, 255, 255, 0.3); /* 半透明白色填充色，与背景对比度好 */
+    transition: left 0.4s ease;
+    z-index: -1; /* 确保它在文字后面 */
+}
+
+/* 当悬停时，让伪元素从左向右移动，模拟“填满”效果 */
+.link-button:hover::before {
+    left: 100%; /* 移动到完全覆盖的位置 */
+}
+
+
+/* ==================== 页脚 (Footer) ==================== */
+footer {
+    text-align: center;
+    padding: 20px;
+    background-color: var(--secondary-color);
+    color: #ccc;
+    font-size: 0.9em;
+}
+
+/* 媒体查询：响应式设计 */
+@media (max-width: 768px) {
+    .hero h1 {
+        font-size: 2.5em;
+    }
+    .subtitle {
+        font-size: 1.1em;
+    }
+
+    .skill-grid {
+        gap: 15px;
+    }
+
+    .skill-item {
+        flex-basis: calc(50% - 20px); /* 两列布局 */
+    }
+}
+
+@media (max-width: 480px) {
+    .hero h1 {
+        font-size: 2em;
+    }
+    .skill-item {
+        flex-basis: calc(50% - 10px); /* 两列布局，更紧凑 */
+    }
+}
