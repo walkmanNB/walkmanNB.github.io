@@ -110,11 +110,21 @@ h2 {
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     position: relative; /* 关键：为伪元素定位做准备 */
     overflow: hidden; /* 确保内容不会溢出，实现平滑过渡 */
+    /* 针对链接的样式覆盖 */
+    color: var(--text-color) !important; 
+    text-decoration: none; /* 取消默认链接下划线 */
 }
+
+.skill-item a {
+    display: block; /* 让整个a标签区域可点击，并继承父级的padding/margin */
+    color: inherit; /* 确保内部文本颜色继承自.skill-item的设置 */
+    text-decoration: none;
+}
+
 
 .skill-item:hover {
     background-color: var(--primary-color);
-    color: white;
+    color: white !important; /* 悬停时文字变白 */
     transform: translateY(-3px);
     box-shadow: 0 6px 12px rgba(52, 152, 219, 0.4);
 }
