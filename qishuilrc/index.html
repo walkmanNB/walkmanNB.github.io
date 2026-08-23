@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>汽水音乐 LRC 歌词解析提取器</title>
+    <title>汽水音乐 LRC 歌词解析工具</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             background-color: #121212;
             color: #ffffff;
             margin: 0;
-            padding: 30px 20px;
+            padding: 20px 16px;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -19,9 +19,10 @@
             max-width: 720px;
             width: 100%;
             background: #1e1e1e;
-            padding: 24px;
+            padding: 20px;
             border-radius: 12px;
             box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+            box-sizing: border-box;
         }
         h2 {
             margin-top: 0;
@@ -29,25 +30,56 @@
             text-align: center;
             color: #00e676;
         }
+        .tab-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+        .tab-btn {
+            flex: 1;
+            padding: 8px;
+            background: #2a2a2a;
+            color: #888;
+            border: 1px solid #444;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .tab-btn.active {
+            background: #00e676;
+            color: #121212;
+            border-color: #00e676;
+        }
         .input-group {
             display: flex;
             gap: 10px;
             margin-bottom: 16px;
         }
-        input[type="text"] {
-            flex: 1;
-            padding: 12px 16px;
+        input[type="text"], textarea {
+            width: 100%;
             background: #2a2a2a;
             border: 1px solid #444;
             border-radius: 8px;
             color: #fff;
             font-size: 14px;
             outline: none;
+            box-sizing: border-box;
         }
-        input[type="text"]:focus {
+        input[type="text"] {
+            padding: 12px 16px;
+            flex: 1;
+        }
+        textarea {
+            padding: 12px;
+            font-family: monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            resize: vertical;
+        }
+        input[type="text"]:focus, textarea:focus {
             border-color: #00e676;
         }
-        button {
+        button.action-btn {
             padding: 12px 20px;
             background: #00e676;
             color: #121212;
@@ -55,38 +87,22 @@
             border-radius: 8px;
             font-weight: bold;
             cursor: pointer;
-            transition: opacity 0.2s;
-        }
-        button:hover {
-            opacity: 0.85;
+            white-space: nowrap;
         }
         button:disabled {
-            background: #555;
+            background: #555 !important;
+            color: #888 !important;
             cursor: not-allowed;
         }
         .status {
             font-size: 14px;
             margin-bottom: 12px;
             min-height: 20px;
+            word-break: break-all;
         }
         .status.error { color: #ff5252; }
         .status.success { color: #00e676; }
         .status.info { color: #29b6f6; }
-        textarea {
-            width: 100%;
-            height: 320px;
-            box-sizing: border-box;
-            background: #181818;
-            border: 1px solid #333;
-            border-radius: 8px;
-            color: #d1d1d1;
-            padding: 12px;
-            font-family: monospace;
-            font-size: 13px;
-            line-height: 1.6;
-            resize: vertical;
-            white-space: pre;
-        }
         .actions {
             margin-top: 12px;
             display: flex;
@@ -99,20 +115,44 @@
 
 <div class="container">
     <h2>汽水音乐 LRC 歌词解析工具</h2>
-    <div class="input-group">
-        <input type="text" id="songUrl" placeholder="粘贴汽水音乐分享链接 (例如: https://www.qishui.com/share/track?track_id=...)" />
-        <button id="parseBtn" onclick="startParse()">解析歌词</button>
+
+    <div class="tab-group">
+        <button class="tab-btn active" id="tabUrl" onclick="switchTab('url')">链接在线解析</button>
+        <button class="tab-btn" id="tabRaw" onclick="switchTab('raw')">粘贴网页源码解析 (保底)</button>
     </div>
+
+    <!-- 模式 1：链接解析 -->
+    <div id="urlMode">
+        <div class="input-group">
+            <input type="text" id="songUrl" placeholder="粘贴汽水音乐分享链接" />
+            <button class="action-btn" id="parseBtn" onclick="startUrlParse()">解析歌词</button>
+        </div>
+    </div>
+
+    <!-- 模式 2：直接贴源码 -->
+    <div id="rawMode" style="display: none; margin-bottom: 16px;">
+        <textarea id="rawHtmlInput" style="height: 120px;" placeholder="在此直接粘贴网页完整 HTML 源码（解决所有网络/跨域问题）..."></textarea>
+        <button class="action-btn" style="width: 100%; margin-top: 8px;" onclick="startRawParse()">解析粘贴的源码</button>
+    </div>
+
     <div id="status" class="status"></div>
-    <textarea id="output" readonly placeholder="标准 LRC 歌词将在此处生成..."></textarea>
+    <textarea id="output" style="height: 280px;" readonly placeholder="标准 LRC 歌词将在此处生成..."></textarea>
+    
     <div class="actions">
-        <button id="copyBtn" onclick="copyLrc()" style="display:none; background:#333; color:#fff;">复制歌词</button>
-        <button id="downloadBtn" onclick="downloadLrc()" style="display:none;">下载 .lrc 文件</button>
+        <button class="action-btn" id="copyBtn" onclick="copyLrc()" style="display:none; background:#333; color:#fff;">复制歌词</button>
+        <button class="action-btn" id="downloadBtn" onclick="downloadLrc()" style="display:none;">下载 .lrc 文件</button>
     </div>
 </div>
 
 <script>
 let currentTrackName = "lyrics";
+
+function switchTab(mode) {
+    document.getElementById("urlMode").style.display = mode === 'url' ? 'block' : 'none';
+    document.getElementById("rawMode").style.display = mode === 'raw' ? 'block' : 'none';
+    document.getElementById("tabUrl").className = "tab-btn " + (mode === 'url' ? 'active' : '');
+    document.getElementById("tabRaw").className = "tab-btn " + (mode === 'raw' ? 'active' : '');
+}
 
 function setStatus(text, type = "info") {
     const statusEl = document.getElementById("status");
@@ -120,44 +160,35 @@ function setStatus(text, type = "info") {
     statusEl.className = "status " + type;
 }
 
-// HTML 实体解码
 function unescapeHtml(str) {
     const txt = document.createElement("textarea");
     txt.innerHTML = str;
     return txt.value;
 }
 
-// 核心转换逻辑
 function convertJsonToLrc(htmlText) {
-    // 匹配包含完整 loaderData 的 _ROUTER_DATA 块
     const regex = /_ROUTER_DATA\s*=\s*(\{.+?\});\s*<\/script>/s;
     let match = htmlText.match(regex);
-    
     if (!match) {
-        const regexFallback = /_ROUTER_DATA\s*=\s*(\{.+?\});/s;
-        match = htmlText.match(regexFallback);
+        match = htmlText.match(/_ROUTER_DATA\s*=\s*(\{.+?\});/s);
     }
-
     if (!match) {
         throw new Error("未能从网页源码中找到 _ROUTER_DATA 歌词数据模块");
     }
 
     const data = JSON.parse(match[1]);
     const trackPage = data?.loaderData?.track_page;
-    
     if (!trackPage || !trackPage.audioWithLyricsOption?.lyrics?.sentences) {
         throw new Error("该歌曲页面数据中未包含歌词列表 (lyrics.sentences)");
     }
 
-    // 记录曲名便于导出保存
     currentTrackName = trackPage.trackInfo?.name || trackPage.trackName || "lyrics";
-
     const sentences = trackPage.audioWithLyricsOption.lyrics.sentences;
     const lrcLines = [];
 
     for (const item of sentences) {
         const startMs = item.startMs || 0;
-        if (startMs > 86400000) continue; // 过滤异常时间戳
+        if (startMs > 86400000) continue;
 
         const text = unescapeHtml(item.text || "");
         const totalSeconds = startMs / 1000.0;
@@ -168,14 +199,47 @@ function convertJsonToLrc(htmlText) {
         const mm = String(minutes).padStart(2, '0');
         const ss = String(seconds).padStart(2, '0');
         const xx = String(hundredths).padStart(2, '0');
-
         lrcLines.push(`[${mm}:${ss}.${xx}]${text}`);
     }
 
     return lrcLines.join("\n");
 }
 
-async function startParse() {
+// 多线路尝试拉取网页
+async function fetchWithProxies(targetUrl) {
+    const proxyList = [
+        { url: `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`, type: 'text' },
+        { url: `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`, type: 'allorigins' },
+        { url: `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`, type: 'text' }
+    ];
+
+    for (let i = 0; i < proxyList.length; i++) {
+        const item = proxyList[i];
+        setStatus(`正在尝试通道 ${i + 1}/${proxyList.length} 拉取数据...`, "info");
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 8000); // 8秒超时
+
+            const res = await fetch(item.url, { signal: controller.signal });
+            clearTimeout(timeoutId);
+
+            if (!res.ok) continue;
+
+            if (item.type === 'allorigins') {
+                const data = await res.json();
+                if (data && data.contents) return data.contents;
+            } else {
+                const text = await res.text();
+                if (text && text.includes("_ROUTER_DATA")) return text;
+            }
+        } catch (e) {
+            console.warn(`代理线路 ${i + 1} 失败:`, e);
+        }
+    }
+    throw new Error("所有在线代理通道均连接失败。请切换到上方「粘贴网页源码解析」选项直接粘贴！");
+}
+
+async function startUrlParse() {
     const urlInput = document.getElementById("songUrl").value.trim();
     const parseBtn = document.getElementById("parseBtn");
     const output = document.getElementById("output");
@@ -187,7 +251,6 @@ async function startParse() {
         return;
     }
 
-    // 提取出纯 URL（兼容带有中文分享文本的输入）
     const matchUrl = urlInput.match(/https?:\/\/[^\s]+/);
     if (!matchUrl) {
         setStatus("未能识别出有效网址", "error");
@@ -196,30 +259,15 @@ async function startParse() {
     const targetUrl = matchUrl[0];
 
     parseBtn.disabled = true;
-    setStatus("正在拉取网页内容，请稍候...", "info");
     output.value = "";
     copyBtn.style.display = "none";
     downloadBtn.style.display = "none";
 
     try {
-        // 使用免费 CORS 代理解决浏览器跨域限制
-        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
-        const response = await fetch(proxyUrl);
-        
-        if (!response.ok) {
-            throw new Error(`网络代理请求失败 (状态码: ${response.status})`);
-        }
-
-        const data = await response.json();
-        const htmlContent = data.contents;
-
-        if (!htmlContent) {
-            throw new Error("获取到的网页内容为空");
-        }
-
+        const htmlContent = await fetchWithProxies(targetUrl);
         const lrcResult = convertJsonToLrc(htmlContent);
         output.value = lrcResult;
-        setStatus("解析成功！", "success");
+        setStatus("✅ 解析成功！", "success");
         copyBtn.style.display = "inline-block";
         downloadBtn.style.display = "inline-block";
     } catch (err) {
@@ -229,11 +277,31 @@ async function startParse() {
     }
 }
 
+function startRawParse() {
+    const rawHtml = document.getElementById("rawHtmlInput").value.trim();
+    const output = document.getElementById("output");
+    const copyBtn = document.getElementById("copyBtn");
+    const downloadBtn = document.getElementById("downloadBtn");
+
+    if (!rawHtml) {
+        setStatus("请先粘贴 HTML 源码！", "error");
+        return;
+    }
+
+    try {
+        const lrcResult = convertJsonToLrc(rawHtml);
+        output.value = lrcResult;
+        setStatus("✅ 解析成功！", "success");
+        copyBtn.style.display = "inline-block";
+        downloadBtn.style.display = "inline-block";
+    } catch (err) {
+        setStatus(`源码解析失败: ${err.message}`, "error");
+    }
+}
+
 function copyLrc() {
     const output = document.getElementById("output");
-    navigator.clipboard.writeText(output.value).then(() => {
-        alert("歌词已复制到剪贴板！");
-    });
+    navigator.clipboard.writeText(output.value).then(() => alert("歌词已复制！"));
 }
 
 function downloadLrc() {
@@ -249,4 +317,3 @@ function downloadLrc() {
 
 </body>
 </html>
-
