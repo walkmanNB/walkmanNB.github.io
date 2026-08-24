@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>404 · 连接中断</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; background: #000; }
+
+  /* ---------- 背景层 ---------- */
+  #matrix { position: fixed; inset: 0; z-index: 0; }
+  .scanlines {
+    position: fixed; inset: 0; z-index: 3; pointer-events: none;
+    background: repeating-linear-gradient(
+      to bottom, rgba(0,0,0,0) 0px, rgba(0,0,0,0) 2px,
+      rgba(0,255,65,0.04) 3px, rgba(0,0,0,0.12) 4px);
+    mix-blend-mode: overlay;
+  }
+  .vignette {
+    position: fixed; inset: 0; z-index: 3; pointer-events: none;
+    background: radial-gradient(ellipse at center,
+      transparent 45%, rgba(0,0,0,0.55) 100%);
+  }
+
+  /* ---------- 内容 ---------- */
+  .wrap {
+    position: relative; z-index: 2; height: 100%;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    font-family: "Cascadia Code", Consolas, "JetBrains Mono",
+      "Courier New", monospace;
+    color: #c8ffd4;
+    gap: 18px;
+  }
+  .err-code {
+    font-size: clamp(11px, 1.6vw, 14px); letter-spacing: 4px;
+    color: #00ff41; opacity: .75; text-shadow: 0 0 8px rgba(0,255,65,.8);
+  }
+
+  /* 故障字效果 */
+  .glitch {
+    position: relative;
+    font-size: clamp(42px, 9vw, 110px);
+    font-weight: bold; letter-spacing: .08em;
+    color: #eaffef;
+    text-shadow: 0 0 12px rgba(0,255,65,.55), 0 0 40px rgba(0,255,65,.25);
+    animation: jitter 3.2s infinite steps(1);
+  }
+  .glitch::before, .glitch::after {
+    content: attr(data-text);
+    position: absolute; left: 0; top: 0; width: 100%;
+  }
+  .glitch::before {
+    color: #00ff41; z-index: -1;
+    animation: slice1 2.1s infinite steps(2, end);
+  }
+  .glitch::after {
+    color: #b6ff00; z-index: -2;
+    animation: slice2 1.7s infinite steps(2, end);
+  }
+  @keyframes slice1 {
+    0%, 86%, 100%   { transform: none; clip-path: inset(0 0 100% 0); }
+    87% { transform: translate(-6px, 2px);  clip-path: inset(10% 0 55% 0); }
+    90% { transform: translate(5px, -2px);  clip-path: inset(60% 0 8% 0); }
+    93% { transform: translate(-3px, 0);    clip-path: inset(30% 0 40% 0); }
+  }
+  @keyframes slice2 {
+    0%, 80%, 100%   { transform: none; clip-path: inset(100% 0 0 0); }
+    81% { transform: translate(7px, 1px);   clip-path: inset(70% 0 5% 0); }
+    85% { transform: translate(-5px, -3px); clip-path: inset(5% 0 75% 0); }
+    88% { transform: translate(3px, 2px);   clip-path: inset(45% 0 30% 0); }
+  }
+  @keyframes jitter {
+    0%, 92%, 100% { transform: none; }
+    93% { transform: translateX(2px) skewX(1.5deg); }
+    96% { transform: translateX(-3px); }
+  }
+
+  .status {
+    font-size: clamp(13px, 2vw, 17px); color: #57d977;
+    min-height: 1.4em;
+  }
+  .status .cursor {
+    display: inline-block; width: .6em; background: #57d977;
+    animation: blink 1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ---------- 按钮 ---------- */
+  #backBtn {
+    margin-top: 26px; padding: 14px 44px;
+    font-family: inherit; font-size: clamp(14px, 2vw, 18px);
+    letter-spacing: 2px; color: #00ff41;
+    background: rgba(0, 255, 65, .05);
+    border: 1px solid #00ff41; border-radius: 3px;
+    box-shadow: 0 0 14px rgba(0,255,65,.35), inset 0 0 14px rgba(0,255,65,.12);
+    cursor: pointer; transition: all .15s;
+  }
+  #backBtn:hover {
+    background: #00ff41; color: #001a06;
+    box-shadow: 0 0 26px rgba(0,255,65,.8), inset 0 0 20px rgba(0,255,65,.4);
+    text-shadow: none;
+  }
+  #backBtn:disabled { opacity: .4; cursor: not-allowed; animation: none; }
+
+  /* 点击后的抖动 */
+  body.shake .wrap { animation: shake .38s linear both; }
+  @keyframes shake {
+    0%,100% { transform: none; }
+    15% { transform: translate(-9px, 4px) rotate(-.6deg); }
+    30% { transform: translate(8px, -5px) rotate(.5deg); }
+    45% { transform: translate(-7px, 3px); }
+    60% { transform: translate(6px, -3px) rotate(-.4deg); }
+    75% { transform: translate(-4px, 2px); }
+    90% { transform: translate(2px, -1px); }
+  }
+
+  /* ---------- 手雷白屏层 ---------- */
+  #flash {
+    position: fixed; inset: 0; z-index: 99;
+    background: #fff; opacity: 0; pointer-events: none;
+  }
+  /* 先快速闪两下（拉栓爆闪），再逐渐变白 */
+  #flash.bang {
+    animation: bang 1.15s cubic-bezier(.55,0,.85,.4) forwards;
+  }
+  @keyframes bang {
+    0%   { opacity: 0; }
+    6%   { opacity: .9; }
+    12%  { opacity: .1; }
+    20%  { opacity: .95; }
+    28%  { opacity: .25; }
+    45%  { opacity: .8; }
+    100% { opacity: 1; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="matrix"></canvas>
+<div class="scanlines"></div>
+<div class="vignette"></div>
+
+<div class="wrap">
+  <div class="err-code">[ ERR_CONNECTION_LOST · 0x4F4 ]</div>
+  <h1 class="glitch" data-text="连接中断…">连接中断…</h1>
+  <div class="status"><span id="log">&gt; 正在尝试重新建立连接</span><span class="cursor">&nbsp;</span></div>
+  <button id="backBtn">// 返回主页 _</button>
+</div>
+
+<div id="flash"></div>
+
+<script>
+/* ========== 配置 ========== */
+const REDIRECT_URL = '/';        // ← 白屏后跳转的目标，改成你的首页
+const RING_SECONDS = 3;          // 耳鸣持续秒数
+
+/* ========== 状态打字机 ========== */
+const logs = [
+  '> 正在尝试重新建立连接',
+  '> ping 192.168.??.?? ... 超时',
+  '> 数据包丢失率 100%',
+  '> 目标页面已从本维度消失',
+];
+let li = 0;
+setInterval(() => {
+  li = (li + 1) % logs.length;
+  const el = document.getElementById('log'), text = logs[li];
+  el.textContent = ''; let i = 0;
+  const t = setInterval(() => {
+    el.textContent += text[i++];
+    if (i >= text.length) clearInterval(t);
+  }, 34);
+}, 3600);
+
+/* ========== Matrix 代码雨 ========== */
+const cvs = document.getElementById('matrix');
+const ctx = cvs.getContext('2d');
+const FS = 16;
+const CHARS = 'アイウエオカキクケコサシスセソﾊﾋﾌﾍﾎ01断连中失码络数传输据<>{}[]/*+=#$';
+let cols, drops;
+
+function resize() {
+  cvs.width = innerWidth; cvs.height = innerHeight;
+  cols = Math.ceil(cvs.width / FS);
+  drops = Array.from({length: cols}, () => Math.random() * -60);
+}
+addEventListener('resize', resize); resize();
+
+function tick() {
+  ctx.fillStyle = 'rgba(0, 8, 2, 0.09)';   // 半透明黑 → 拖尾
+  ctx.fillRect(0, 0, cvs.width, cvs.height);
+  ctx.font = FS + 'px monospace';
+  for (let i = 0; i < cols; i++) {
+    const ch = CHARS[Math.random() * CHARS.length | 0];
+    const y = drops[i] * FS;
+    // 头部字符更亮
+    ctx.fillStyle = Math.random() < .03 ? '#d4ffe0' : '#00ff41';
+    ctx.fillText(ch, i * FS, y);
+    if (y > cvs.height && Math.random() > .975) drops[i] = 0;
+    drops[i]++;
+  }
+  requestAnimationFrame(tick);
+}
+tick();
+
+/* ========== 音效（点击触发，浏览器允许） ========== */
+let AC;
+const ac = () => AC || (AC = new (window.AudioContext || window.webkitAudioContext)());
+
+function playBang() {          // 低频“砰”
+  const c = ac(), t = c.currentTime;
+  const o = c.createOscillator(), g = c.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(150, t);
+  o.frequency.exponentialRampToValueAtTime(32, t + .3);
+  g.gain.setValueAtTime(.9, t);
+  g.gain.exponentialRampToValueAtTime(.001, t + .35);
+  o.connect(g).connect(c.destination); o.start(t); o.stop(t + .4);
+}
+
+function playRing() {          // 高频耳鸣（白屏期间）
+  const c = ac(), t = c.currentTime, dur = RING_SECONDS;
+  [3300, 4150].forEach((f, k) => {
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = 'sine'; o.frequency.value = f;
+    g.gain.setValueAtTime(k ? .05 : .12, t);           // 起始刺耳
+    g.gain.exponentialRampToValueAtTime(.0001, t + dur); // 缓慢消退
+    o.connect(g).connect(c.destination); o.start(t); o.stop(t + dur);
+  });
+}
+
+/* ========== 返回按钮 → 手雷流程 ========== */
+const btn = document.getElementById('backBtn');
+const flash = document.getElementById('flash');
+
+btn.addEventListener('click', () => {
+  btn.disabled = true;
+  document.body.classList.add('shake');   // 被炸到，画面猛晃
+  playBang();                              // 砰！
+
+  setTimeout(() => {
+    flash.classList.add('bang');           // 双闪 → 逐渐白屏
+    playRing();                            // 耳鸣响起
+  }, 320);
+
+  setTimeout(() => {                       // 全白瞬间跳转
+    window.location.href = REDIRECT_URL;
+  }, 1450);
+});
+</script>
+</body>
+</html>
