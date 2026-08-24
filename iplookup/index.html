@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>IP 归属地查询 · IP Lookup</title>
+<style>
+  :root{
+    --bg:#0a0e1a;
+    --card:rgba(255,255,255,.045);
+    --border:rgba(255,255,255,.09);
+    --text:#e8ecf6;
+    --sub:#8b93ab;
+    --accent1:#6366f1;
+    --accent2:#22d3ee;
+    --ok:#34d399;
+    --err:#fb7185;
+    --mono:"SFMono-Regular",Consolas,"JetBrains Mono","Courier New",monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    overflow-x:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* ---------- 背景极光 ---------- */
+  .aurora{position:fixed;inset:0;z-index:0;overflow:hidden;filter:blur(90px);opacity:.55}
+  .blob{position:absolute;border-radius:50%}
+  .b1{width:520px;height:520px;background:#4f46e5;top:-160px;left:-120px;animation:drift 16s ease-in-out infinite alternate}
+  .b2{width:460px;height:460px;background:#06b6d4;top:10%;right:-140px;animation:drift 20s ease-in-out infinite alternate-reverse}
+  .b3{width:420px;height:420px;background:#a855f7;bottom:-180px;left:32%;animation:drift 24s ease-in-out infinite alternate}
+  @keyframes drift{from{transform:translate(0,0) scale(1)}to{transform:translate(70px,50px) scale(1.15)}}
+
+  main{position:relative;z-index:1;max-width:880px;margin:0 auto;padding:48px 20px 60px}
+
+  /* ---------- 头部 ---------- */
+  header{text-align:center;margin-bottom:34px}
+  .logo{
+    width:64px;height:64px;margin:0 auto 18px;border-radius:20px;
+    display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(135deg,var(--accent1),var(--accent2));
+    box-shadow:0 12px 40px rgba(99,102,241,.45);
+    animation:pop .6s cubic-bezier(.2,1.4,.4,1) both;
+  }
+  @keyframes pop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
+  h1{
+    font-size:clamp(26px,5vw,38px);font-weight:800;letter-spacing:.5px;
+    background:linear-gradient(120deg,#fff 30%,#a5b4fc 60%,#67e8f9);
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  }
+  .subtitle{color:var(--sub);font-size:14px;margin-top:10px}
+
+  /* ---------- 玻璃卡片 ---------- */
+  .glass{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:22px;
+    backdrop-filter:blur(18px);
+    -webkit-backdrop-filter:blur(18px);
+    box-shadow:0 20px 60px rgba(0,0,0,.35);
+  }
+
+  /* ---------- 搜索区 ---------- */
+  .search-wrap{padding:14px;display:flex;gap:10px;align-items:center}
+  .search-wrap svg{flex:none;margin-left:10px;color:var(--sub)}
+  #ipInput{
+    flex:1;background:transparent;border:none;outline:none;color:var(--text);
+    font-size:16px;font-family:var(--mono);padding:14px 6px;min-width:0;
+  }
+  #ipInput::placeholder{color:#5b6379;font-family:inherit}
+  .btn-main{
+    flex:none;display:inline-flex;align-items:center;gap:8px;
+    border:none;cursor:pointer;color:#fff;font-size:15px;font-weight:600;
+    padding:13px 26px;border-radius:14px;
+    background:linear-gradient(135deg,var(--accent1),var(--accent2));
+    transition:transform .15s ease,box-shadow .25s ease,opacity .2s;
+    box-shadow:0 8px 24px rgba(99,102,241,.4);
+  }
+  .btn-main:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(99,102,241,.55)}
+  .btn-main:active{transform:scale(.97)}
+  .btn-main:disabled{opacity:.65;cursor:not-allowed;transform:none}
+
+  /* ---------- 结果 ---------- */
+  #result{margin-top:26px;display:none}
+  .result-head{padding:24px 28px 18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;border-bottom:1px solid var(--border)}
+  .live-dot{width:9px;height:9px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 rgba(52,211,153,.6);animation:pulse 1.8s infinite}
+  @keyframes pulse{to{box-shadow:0 0 0 10px rgba(52,211,153,0)}}
+  .result-ip{font-family:var(--mono);font-size:clamp(20px,4vw,30px);font-weight:700;letter-spacing:.5px}
+  .flag-big{font-size:34px;line-height:1;filter:drop-shadow(0 4px 10px rgba(0,0,0,.4))}
+  .copy-btn{
+    margin-left:auto;display:inline-flex;align-items:center;gap:6px;cursor:pointer;
+    color:var(--sub);background:rgba(255,255,255,.05);border:1px solid var(--border);
+    padding:9px 16px;border-radius:11px;font-size:13px;transition:all .2s;
+  }
+  .copy-btn:hover{color:#fff;border-color:rgba(255,255,255,.25)}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;padding:20px}
+  .tile{
+    background:rgba(255,255,255,.03);border:1px solid var(--border);
+    border-radius:16px;padding:16px 18px;min-width:0;
+    transition:transform .25s,border-color .25s,background .25s;
+    opacity:0;animation:rise .5s ease forwards;
+  }
+  .tile:hover{transform:translateY(-3px);border-color:rgba(129,140,248,.5);background:rgba(99,102,241,.07)}
+  @keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  .t-label{display:flex;align-items:center;gap:7px;font-size:11.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--sub);margin-bottom:9px}
+  .t-value{font-size:16px;font-weight:600;word-break:break-word}
+  .t-sub{font-size:12px;color:var(--sub);margin-top:4px;font-weight:400}
+
+  .map-box{margin:0 20px 20px;border-radius:16px;overflow:hidden;border:1px solid var(--border);position:relative;height:300px}
+  .map-box iframe{width:100%;height:100%;border:0;filter:saturate(.85) contrast(1.02)}
+  .map-tag{
+    position:absolute;bottom:12px;right:12px;font-size:12px;color:#fff;text-decoration:none;
+    background:rgba(10,14,26,.75);backdrop-filter:blur(6px);
+    padding:6px 12px;border-radius:9px;border:1px solid var(--border);transition:.2s;
+  }
+  .map-tag:hover{border-color:var(--accent2)}
+
+  /* ---------- 历史 ---------- */
+  #historyWrap{display:none;margin-top:22px}
+  .h-title{display:flex;align-items:center;font-size:12.5px;color:var(--sub);letter-spacing:1px;margin-bottom:10px}
+  .clear-btn{margin-left:auto;cursor:pointer;color:#5b6379;font-size:12px;background:none;border:none;transition:.2s}
+  .clear-btn:hover{color:var(--err)}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{
+    cursor:pointer;font-family:var(--mono);font-size:13px;color:#c3cae0;
+    background:rgba(255,255,255,.04);border:1px solid var(--border);
+    padding:7px 14px;border-radius:999px;transition:.2s;
+  }
+  .chip:hover{border-color:var(--accent2);color:#fff;transform:translateY(-1px)}
+
+  footer{text-align:center;margin-top:44px;font-size:12.5px;color:#585f75;line-height:2}
+  footer a{color:#818cf8;text-decoration:none}
+  footer a:hover{text-decoration:underline}
+
+  /* ---------- 骨架屏 ---------- */
+  .sk{background:linear-gradient(90deg,rgba(255,255,255,.05) 25%,rgba(255,255,255,.12) 50%,rgba(255,255,255,.05) 75%);
+      background-size:200% 100%;animation:shimmer 1.3s infinite;border-radius:8px}
+  @keyframes shimmer{to{background-position:-200% 0}}
+
+  /* ---------- Toast ---------- */
+  #toast{
+    position:fixed;left:50%;bottom:34px;transform:translate(-50%,20px);
+    padding:12px 22px;border-radius:13px;font-size:14px;font-weight:500;
+    background:rgba(17,24,39,.92);border:1px solid var(--border);
+    backdrop-filter:blur(12px);opacity:0;pointer-events:none;z-index:99;
+    transition:all .3s cubic-bezier(.2,1,.3,1);box-shadow:0 10px 40px rgba(0,0,0,.5);
+  }
+  #toast.show{opacity:1;transform:translate(-50%,0)}
+  #toast.err{border-color:rgba(251,113,133,.5)}
+  #toast.ok{border-color:rgba(52,211,153,.5)}
+
+  @media(max-width:600px){
+    .search-wrap{flex-direction:column}
+    .search-wrap svg{display:none}
+    .btn-main{width:100%;justify-content:center}
+    .copy-btn{margin-left:0;width:100%;justify-content:center}
+    .map-box{height:220px}
+  }
+</style>
+</head>
+<body>
+
+<div class="aurora"><span class="blob b1"></span><span class="blob b2"></span><span class="blob b3"></span></div>
+
+<main>
+  <header>
+    <div class="logo">
+      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round">
+        <circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.8 2.6 4 5.6 4 9s-1.2 6.4-4 9c-2.8-2.6-4-5.6-4-9s1.2-6.4 4-9z"/>
+      </svg>
+    </div>
+    <h1>IP 归属地查询</h1>
+    <p class="subtitle">输入任意 IP 地址，即刻定位 · 数据来源 ipinfo.io</p>
+  </header>
+
+  <!-- 搜索 -->
+  <section class="glass search-wrap">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>
+    </svg>
+    <input id="ipInput" placeholder="输入 IP 地址（如 8.8.8.8），留空则查询本机 IP" autocomplete="off" spellcheck="false" />
+    <button class="btn-main" id="goBtn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      <span id="goText">查 询</span>
+    </button>
+  </section>
+
+  <!-- 结果 -->
+  <section id="result" class="glass"></section>
+
+  <!-- 历史记录 -->
+  <section id="historyWrap">
+    <div class="h-title">最近查询
+      <button class="clear-btn" id="clearBtn">清空记录</button>
+    </div>
+    <div class="chips" id="chips"></div>
+  </section>
+
+  <footer>
+    Powered by <a href="https://ipinfo.io" target="_blank" rel="noopener">ipinfo.io</a> · 地图 © OpenStreetMap<br/>
+    无需任何密钥，纯前端实现，数据仅供参考
+  </footer>
+</main>
+
+<div id="toast"></div>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const resultEl = $('#result'), inputEl = $('#ipInput'), goBtn = $('#goBtn'), goText = $('#goText');
+  let timeTimer = null;
+
+  /* ---------- 工具 ---------- */
+  const flagOf = cc => (cc && cc.length === 2)
+    ? String.fromCodePoint(...[...cc.toUpperCase()].map(c => 127397 + c.charCodeAt(0))) : '';
+
+  const countryName = cc => {
+    if (!cc || cc.length !== 2) return '';
+    try { return new Intl.DisplayNames(['zh-CN'], { type: 'region' }).of(cc.toUpperCase()) || cc; }
+    catch { return cc; }
+  };
+
+  const toast = (msg, type = '') => {
+    const t = $('#toast');
+    t.textContent = msg; t.className = type;
+    void t.offsetWidth;            // 重启动画
+    t.classList.add('show');
+    clearTimeout(t._tm);
+    t._tm = setTimeout(() => t.classList.remove('show'), 2600);
+  };
+
+  const fmtLoc = tz => {
+    try {
+      return new Intl.DateTimeFormat('zh-CN', {
+        timeZone: tz, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+      }).format(new Date());
+    } catch { return '--:--:--'; }
+  };
+
+  /* ---------- 历史记录 ---------- */
+  const HKEY = 'ip_history_v1';
+  const getHist = () => { try { return JSON.parse(localStorage.getItem(HKEY)) || []; } catch { return []; } };
+  const pushHist = ip => {
+    if (!ip) return;
+    const h = [ip, ...getHist().filter(x => x !== ip)].slice(0, 8);
+    localStorage.setItem(HKEY, JSON.stringify(h));
+    renderHist();
+  };
+  const renderHist = () => {
+    const h = getHist();
+    $('#historyWrap').style.display = h.length ? '' : 'none';
+    $('#chips').innerHTML = h.map(ip => `<button class="chip" data-ip="${ip}">${ip}</button>`).join('');
+    $('#chips').querySelectorAll('.chip').forEach(el =>
+      el.onclick = () => { inputEl.value = el.dataset.ip; doQuery(); });
+  };
+  $('#clearBtn').onclick = () => { localStorage.removeItem(HKEY); renderHist(); };
+
+  /* ---------- 图标 ---------- */
+  const icons = {
+    globe:  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/></svg>',
+    city:   '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l5-3v17M14 21V10l5-2v13"/></svg>',
+    region: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-5.5-7-11a7 7 0 0 1 14 0c0 5.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+    post:   '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 8l9 6 9-6"/></svg>',
+    clock:  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>',
+    asn:    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17V7l8-3 8 3v10l-8 3z"/><path d="M12 4v17M4 9l8 3 8-3"/></svg>',
+    pin:    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>',
+    net:    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="2.5"/><circle cx="5" cy="19" r="2.5"/><circle cx="19" cy="19" r="2.5"/><path d="M12 7.5v5M7 17.5l3-3.5M17 17.5l-3-3.5"/></svg>'
+  };
+
+  const tile = (icon, label, value, sub = '', delay = 0) => `
+    <div class="tile" style="animation-delay:${delay}ms">
+      <div class="t-label">${icons[icon]} ${label}</div>
+      <div class="t-value">${value}</div>
+      ${sub ? `<div class="t-sub">${sub}</div>` : ''}
+    </div>`;
+
+  const skeleton = () => `
+    <div style="padding:26px">
+      <div class="sk" style="height:30px;width:55%;margin-bottom:22px"></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px">
+        ${Array.from({length:6},()=>'<div class="sk" style="height:86px"></div>').join('')}
+      </div>
+      <div class="sk" style="height:220px;margin-top:14px;border-radius:16px"></div>
+    </div>`;
+
+  /* ---------- 渲染结果 ---------- */
+  const render = d => {
+    const cc = (d.country || '').toUpperCase();
+    const flag = flagOf(cc);
+    const cname = countryName(cc);
+
+    // 时区当地实时时间
+    clearInterval(timeTimer);
+    let tzHTML = d.timezone || '未知';
+    if (d.timezone) {
+      tzHTML += `<span id="tzClock"></span>`;
+    }
+
+    let html = `
+      <div class="result-head">
+        <span class="live-dot"></span>
+        ${flag ? `<span class="flag-big">${flag}</span>` : ''}
+        <span class="result-ip">${d.ip || '未知'}</span>
+        <button class="copy-btn" id="copyBtn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+          复制 IP
+        </button>
+      </div>
+      <div class="grid">
+        ${tile('globe','国家 / 地区', `${cname}${cc ? ' <span style="color:var(--sub);font-weight:400;font-size:13px">('+cc+')</span>' : ''}`, '', 0)}
+        ${tile('city','城市', d.city || '未知', '', 60)}
+        ${tile('region','省州 / 地区', d.region || '未知', '', 120)}
+        ${tile('post','邮政编码', d.postal || '未知', '', 180)}
+        ${tile('clock','时区', tzHTML, '', 240)}
+        ${tile('pin','经纬度', d.loc ? d.loc.replace(',', ', ') : '未知', '', 300)}
+        ${tile('asn','运营商 / ASN', `<span style="font-size:14px">${d.org || '未知'}</span>`, '', 360)}
+        ${tile('net','主机名', `<span style="font-size:14px">${d.hostname || '—'}</span>`, '', 420)}
+      </div>`;
+
+    // 地图
+    if (d.loc) {
+      const [lat, lon] = d.loc.split(',').map(Number);
+      if (!isNaN(lat) && !isNaN(lon)) {
+        const dl = 0.4, dn = 0.55;
+        const bbox = `${lon-dn},${lat-dl},${lon+dn},${lat+dl}`;
+        html += `
+          <div class="map-box">
+            <iframe title="地图" loading="lazy" src="https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lon}"></iframe>
+            <a class="map-tag" target="_blank" rel="noopener" href="https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=11/${lat}/${lon}">
+              在大地图中打开 ↗
+            </a>
+          </div>`;
+      }
+    }
+
+    resultEl.innerHTML = html;
+    resultEl.style.display = '';
+
+    // 复制按钮
+    $('#copyBtn').onclick = async () => {
+      try { await navigator.clipboard.writeText(d.ip); toast('✓ 已复制到剪贴板', 'ok'); }
+      catch { toast('复制失败，请手动选择', 'err'); }
+    };
+
+    // 当地时钟
+    if (d.timezone) {
+      const tick = () => { const c = document.getElementById('tzClock'); if (!c) return clearInterval(timeTimer);
+        c.textContent = '　当地时间 ' + fmtLoc(d.timezone); };
+      tick(); timeTimer = setInterval(tick, 1000);
+    }
+  };
+
+  /* ---------- 核心查询 ---------- */
+  async function doQuery() {
+    const raw = inputEl.value.trim();
+    if (raw && !/^[\d.:a-fA-F]+$/.test(raw)) {
+      toast('请输入有效的 IP 地址', 'err'); return;
+    }
+    goBtn.disabled = true; goText.textContent = '查询中…';
+    resultEl.style.display = ''; resultEl.innerHTML = skeleton();
+
+    const url = raw ? `https://ipinfo.io/${encodeURIComponent(raw)}/json`
+                    : 'https://ipinfo.io/json';
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const d = await res.json();
+      if (d.error) throw new Error(d.error.title || d.error.message || '查询出错');
+      render(d);
+      if (raw && d.ip) pushHist(d.ip);
+      toast(raw ? `✓ 已定位 ${d.ip}` : '✓ 已获取你的本机 IP 信息', 'ok');
+    } catch (e) {
+      resultEl.innerHTML = `
+        <div style="padding:56px 24px;text-align:center">
+          <div style="font-size:42px;margin-bottom:14px">📡</div>
+          <div style="font-size:17px;font-weight:600;margin-bottom:8px">查询失败</div>
+          <div style="font-size:13.5px;color:var(--sub)">${e.message}<br/>可能是网络受限或请求过于频繁，请稍后重试</div>
+        </div>`;
+      toast('查询失败：' + e.message, 'err');
+    } finally {
+      goBtn.disabled = false; goText.textContent = '查 询';
+    }
+  }
+
+  /* ---------- 事件绑定 ---------- */
+  goBtn.addEventListener('click', doQuery);
+  inputEl.addEventListener('keydown', e => { if (e.key === 'Enter') doQuery(); });
+  window.addEventListener('keydown', e => {           // 按 "/" 快速聚焦搜索框
+    if (e.key === '/' && document.activeElement !== inputEl) { e.preventDefault(); inputEl.focus(); }
+  });
+
+  renderHist();
+  doQuery();   // 打开页面自动查询本机 IP
+})();
+</script>
+</body>
+</html>
