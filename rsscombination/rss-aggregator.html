@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>新闻聚合器 - 多媒体资讯中心</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        gray: {
+                            50: '#f9fafb',
+                            100: '#f3f4f6',
+                            200: '#e5e7eb',
+                            300: '#d1d5db',
+                            400: '#9ca3af',
+                            500: '#6b7280',
+                            600: '#4b5563',
+                            700: '#374151',
+                            800: '#1f2937',
+                            900: '#111827',
+                            950: '#030712',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        * {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        
+        .glass-effect {
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        
+        .audio-player {
+            width: 100%;
+            height: 40px;
+            border-radius: 8px;
+        }
+        
+        .audio-player::-webkit-media-controls-panel {
+            background-color: #f3f4f6;
+        }
+        
+        .dark .audio-player::-webkit-media-controls-panel {
+            background-color: #374151;
+        }
+        
+        .card-hover {
+            transition: all 0.2s ease;
+        }
+        
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+        
+        .dark .card-hover:hover {
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        }
+        
+        .tab-active {
+            border-bottom: 2px solid #3b82f6;
+            color: #3b82f6;
+        }
+        
+        .loading-spinner {
+            border: 3px solid #f3f4f6;
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .line-clamp-2 {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        
+        .line-clamp-3 {
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        
+        .image-loading {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: loading 1.5s infinite;
+        }
+        
+        @keyframes loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 min-h-screen transition-colors duration-200">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Header -->
+        <header class="mb-8">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">新闻聚合器</h1>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">多媒体资讯中心</p>
+                    </div>
+                </div>
+                
+                <div class="flex items-center gap-3">
+                    <!-- Search -->
+                    <div class="relative flex-1 md:w-80">
+                        <input type="text" id="searchInput" placeholder="搜索所有内容..." 
+                            class="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all">
+                        <svg class="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                        </svg>
+                    </div>
+                    
+                    <!-- Dark mode toggle -->
+                    <button id="darkModeToggle" class="p-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                        <svg class="w-5 h-5 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                        </svg>
+                        <svg class="w-5 h-5 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+                        </svg>
+                    </button>
+                    
+                    <!-- Add source button -->
+                    <button id="addSourceBtn" class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                        </svg>
+                        添加订阅源
+                    </button>
+                    
+                    <!-- Manage sources button -->
+                    <button id="manageSourcesBtn" class="px-4 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        </svg>
+                        管理订阅源
+                    </button>
+                </div>
+            </div>
+        </header>
+        
+        <!-- Category Tabs -->
+        <nav class="mb-6 border-b border-gray-200 dark:border-gray-700">
+            <div class="flex gap-6 overflow-x-auto">
+                <button class="category-tab tab-active px-1 py-3 font-medium text-sm whitespace-nowrap transition-colors" data-category="all">
+                    全部内容
+                </button>
+                <button class="category-tab px-1 py-3 font-medium text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white whitespace-nowrap transition-colors" data-category="news">
+                    图文资讯
+                </button>
+                <button class="category-tab px-1 py-3 font-medium text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white whitespace-nowrap transition-colors" data-category="podcast">
+                    播客节目
+                </button>
+                <button class="category-tab px-1 py-3 font-medium text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white whitespace-nowrap transition-colors" data-category="international">
+                    国际要闻
+                </button>
+                <button class="category-tab px-1 py-3 font-medium text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white whitespace-nowrap transition-colors" data-category="taiwan">
+                    台湾要闻
+                </button>
+                <button class="category-tab px-1 py-3 font-medium text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white whitespace-nowrap transition-colors" data-category="china">
+                    大陆新闻
+                </button>
+                <button class="category-tab px-1 py-3 font-medium text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white whitespace-nowrap transition-colors" data-category="finance">
+                    财经消息
+                </button>
+                <button class="category-tab px-1 py-3 font-medium text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white whitespace-nowrap transition-colors" data-category="entertainment">
+                    娱乐
+                </button>
+                <button class="category-tab px-1 py-3 font-medium text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white whitespace-nowrap transition-colors" data-category="health">
+                    健康
+                </button>
+            </div>
+        </nav>
+        
+        <!-- Content Area -->
+        <main>
+            <!-- Loading State -->
+            <div id="loadingState" class="flex flex-col items-center justify-center py-12">
+                <div class="loading-spinner mb-4"></div>
+                <p class="text-gray-500 dark:text-gray-400">正在加载新闻源...</p>
+            </div>
+            
+            <!-- Content Grid -->
+            <div id="contentGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 hidden">
+                <!-- Cards will be dynamically inserted here -->
+            </div>
+            
+            <!-- Empty State -->
+            <div id="emptyState" class="hidden flex flex-col items-center justify-center py-12">
+                <svg class="w-16 h-16 text-gray-300 dark:text-gray-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"></path>
+                </svg>
+                <p class="text-gray-500 dark:text-gray-400 text-lg">暂无内容</p>
+                <p class="text-gray-400 dark:text-gray-500 text-sm mt-1">请添加订阅源或尝试其他分类</p>
+            </div>
+        </main>
+        
+        <!-- Source Management Panel -->
+        <div id="sourcePanel" class="fixed inset-0 bg-black/50 glass-effect hidden items-center justify-center z-50">
+            <div class="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-xl font-semibold">我的订阅源</h2>
+                    <button id="closeSourcePanel" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div id="sourceList" class="space-y-3 max-h-96 overflow-y-auto">
+                    <!-- Sources will be listed here -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Add Source Modal -->
+    <div id="addSourceModal" class="fixed inset-0 bg-black/50 glass-effect hidden items-center justify-center z-50">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-xl font-semibold">添加 JSON 订阅源</h2>
+                <button id="closeModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            
+            <form id="addSourceForm" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium mb-2">名称</label>
+                    <input type="text" id="sourceName" required
+                        class="w-full px-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                        placeholder="例如：科技新闻">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium mb-2">JSON URL</label>
+                    <input type="url" id="sourceUrl" required
+                        class="w-full px-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                        placeholder="https://example.com/news.json">
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">支持返回新闻数组的 JSON 格式</p>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium mb-2">类型</label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <label class="flex items-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg cursor-pointer border-2 border-transparent has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50 dark:has-[:checked]:bg-blue-900/20">
+                            <input type="radio" name="sourceType" value="news" class="sr-only" checked>
+                            <div class="flex items-center gap-2">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"></path>
+                                </svg>
+                                <span class="text-sm">图文资讯</span>
+                            </div>
+                        </label>
+                        <label class="flex items-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg cursor-pointer border-2 border-transparent has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50 dark:has-[:checked]:bg-blue-900/20">
+                            <input type="radio" name="sourceType" value="podcast" class="sr-only">
+                            <div class="flex items-center gap-2">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+                                </svg>
+                                <span class="text-sm">播客节目</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="flex gap-3 pt-4">
+                    <button type="button" id="cancelAdd" class="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+                        取消
+                    </button>
+                    <button type="submit" class="flex-1 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors">
+                        添加订阅
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Default JSON sources
+        const defaultSources = [
+            {
+                id: 'default-json-1',
+                name: '综合新闻源',
+                url: 'https://raw.githubusercontent.com/walkmanNB/RSSupdater/refs/heads/main/news.json',
+                type: 'news',
+                isDefault: true
+            }
+        ];
+
+
+
+        // State
+        let sources = [];
+        let allItems = [];
+        let currentCategory = 'all';
+        let searchQuery = '';
+
+        // DOM Elements
+        const loadingState = document.getElementById('loadingState');
+        const contentGrid = document.getElementById('contentGrid');
+        const emptyState = document.getElementById('emptyState');
+        const searchInput = document.getElementById('searchInput');
+        const darkModeToggle = document.getElementById('darkModeToggle');
+        const addSourceBtn = document.getElementById('addSourceBtn');
+        const addSourceModal = document.getElementById('addSourceModal');
+        const closeModal = document.getElementById('closeModal');
+        const cancelAdd = document.getElementById('cancelAdd');
+        const addSourceForm = document.getElementById('addSourceForm');
+        const categoryTabs = document.querySelectorAll('.category-tab');
+        const manageSourcesBtn = document.getElementById('manageSourcesBtn');
+
+        // Initialize
+        function init() {
+            console.log('Initializing app...');
+            loadSources();
+            setupEventListeners();
+            loadDarkMode();
+            fetchAllJSON();
+            console.log('App initialized');
+        }
+
+        // Load sources from localStorage or use defaults
+        function loadSources() {
+            // Try to load from new key first
+            let stored = localStorage.getItem('jsonSources');
+            
+            // If not found, try to migrate from old key
+            if (!stored) {
+                const oldStored = localStorage.getItem('rssSources');
+                if (oldStored) {
+                    console.log('Migrating from rssSources to jsonSources');
+                    localStorage.setItem('jsonSources', oldStored);
+                    localStorage.removeItem('rssSources');
+                    stored = oldStored;
+                }
+            }
+            
+            if (stored) {
+                sources = JSON.parse(stored);
+            } else {
+                sources = [...defaultSources];
+                saveSources();
+            }
+        }
+
+        // Save sources to localStorage
+        function saveSources() {
+            localStorage.setItem('jsonSources', JSON.stringify(sources));
+        }
+
+        // Setup event listeners
+        function setupEventListeners() {
+            // Dark mode toggle
+            darkModeToggle.addEventListener('click', toggleDarkMode);
+            
+            // Search
+            searchInput.addEventListener('input', (e) => {
+                searchQuery = e.target.value.toLowerCase();
+                renderContent();
+            });
+            
+            // Category tabs
+            categoryTabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    categoryTabs.forEach(t => t.classList.remove('tab-active'));
+                    tab.classList.add('tab-active');
+                    currentCategory = tab.dataset.category;
+                    renderContent();
+                });
+            });
+            
+            // Add source modal
+            addSourceBtn.addEventListener('click', () => {
+                addSourceModal.classList.remove('hidden');
+                addSourceModal.classList.add('flex');
+            });
+            
+            closeModal.addEventListener('click', closeAddModal);
+            cancelAdd.addEventListener('click', closeAddModal);
+            
+            addSourceForm.addEventListener('submit', handleAddSource);
+            
+            // Manage sources button
+            if (manageSourcesBtn) {
+                manageSourcesBtn.addEventListener('click', () => {
+                    console.log('Manage sources button clicked');
+                    toggleSourcePanel();
+                });
+            } else {
+                console.error('manageSourcesBtn not found');
+            }
+            
+            closeSourcePanel.addEventListener('click', () => {
+                sourcePanel.classList.add('hidden');
+                sourcePanel.classList.remove('flex');
+            });
+            
+            // Close source panel on outside click
+            sourcePanel.addEventListener('click', (e) => {
+                if (e.target === sourcePanel) {
+                    sourcePanel.classList.add('hidden');
+                    sourcePanel.classList.remove('flex');
+                }
+            });
+            
+            // Close modal on outside click
+            addSourceModal.addEventListener('click', (e) => {
+                if (e.target === addSourceModal) {
+                    closeAddModal();
+                }
+            });
+        }
+
+        // Dark mode functions
+        function loadDarkMode() {
+            const isDark = localStorage.getItem('darkMode') === 'true';
+            if (isDark) {
+                document.documentElement.classList.add('dark');
+            }
+        }
+
+        function toggleDarkMode() {
+            document.documentElement.classList.toggle('dark');
+            localStorage.setItem('darkMode', document.documentElement.classList.contains('dark'));
+        }
+
+        // Modal functions
+        function closeAddModal() {
+            addSourceModal.classList.add('hidden');
+            addSourceModal.classList.remove('flex');
+            addSourceForm.reset();
+        }
+
+        function toggleSourcePanel() {
+            const panel = document.getElementById('sourcePanel');
+            console.log('toggleSourcePanel called, panel:', panel);
+            if (!panel) {
+                console.error('sourcePanel not found');
+                return;
+            }
+            
+            if (panel.classList.contains('hidden')) {
+                panel.classList.remove('hidden');
+                panel.classList.add('flex');
+                console.log('Panel opened');
+                console.log('Rendering source list');
+                renderSourceList();
+            } else {
+                panel.classList.add('hidden');
+                panel.classList.remove('flex');
+                console.log('Panel closed');
+            }
+        }
+
+        // Add new source
+        function handleAddSource(e) {
+            e.preventDefault();
+            
+            const name = document.getElementById('sourceName').value;
+            const url = document.getElementById('sourceUrl').value;
+            const type = document.querySelector('input[name="sourceType"]:checked').value;
+            
+            const newSource = {
+                id: 'custom-' + Date.now(),
+                name,
+                url,
+                type,
+                isDefault: false
+            };
+            
+            sources.push(newSource);
+            saveSources();
+            closeAddModal();
+            
+            // Fetch the new source
+            fetchJSON(newSource).then(() => {
+                renderContent();
+            });
+        }
+
+        // Delete source
+        function deleteSource(id) {
+            sources = sources.filter(s => s.id !== id);
+            saveSources();
+            renderSourceList();
+            fetchAllJSON();
+        }
+
+        // Render source list
+        function renderSourceList() {
+            sourceList.innerHTML = sources.map(source => `
+                <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg ${source.type === 'podcast' ? 'bg-purple-100 dark:bg-purple-900/30' : 'bg-blue-100 dark:bg-blue-900/30'} flex items-center justify-center">
+                            ${source.type === 'podcast' 
+                                ? '<svg class="w-4 h-4 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path></svg>'
+                                : '<svg class="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"></path></svg>'
+                            }
+                        </div>
+                        <div>
+                            <p class="font-medium text-sm">${source.name} ${source.isDefault ? '<span class="ml-2 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded">默认订阅</span>' : ''}</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">${source.type === 'podcast' ? '播客' : '资讯'}</p>
+                        </div>
+                    </div>
+                    ${!source.isDefault ? `
+                        <button onclick="deleteSource('${source.id}')" class="p-2 text-gray-400 hover:text-red-500 transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                            </svg>
+                        </button>
+                    ` : ''}
+                </div>
+            `).join('');
+        }
+
+        // Fetch all JSON feeds
+        async function fetchAllJSON() {
+            loadingState.classList.remove('hidden');
+            contentGrid.classList.add('hidden');
+            emptyState.classList.add('hidden');
+            
+            allItems = [];
+            
+            const fetchPromises = sources.map(source => fetchJSON(source));
+            await Promise.all(fetchPromises);
+            
+            loadingState.classList.add('hidden');
+            renderContent();
+        }
+
+        // Fetch single JSON feed
+        async function fetchJSON(source) {
+            try {
+                const response = await fetch(source.url);
+                if (!response.ok) throw new Error('Failed to fetch');
+                
+                const data = await response.json();
+                
+                if (Array.isArray(data)) {
+                    data.forEach(item => {
+                        // Handle JSON format
+                        const title = item.title || '';
+                        const link = item.link || '';
+                        const description = item.description || '';
+                        const pubDate = item.pubDate || '';
+                        const audioUrl = item.audioUrl || '';
+                        const sourceName = item.sourceName || source.name;
+                        const sourceType = item.sourceType || source.type;
+                        
+                        // Extract categories if available
+                        const categories = item.categories || [];
+                        
+                        // Extract image if available
+                        const imageUrl = item.imageUrl || '';
+                        
+                        // Strip HTML from description
+                        const plainDescription = description.replace(/<[^>]*>/g, '').substring(0, 200);
+                        
+                        allItems.push({
+                            id: `${source.id}-${title.substring(0, 20)}`,
+                            title,
+                            link,
+                            description: plainDescription,
+                            pubDate: new Date(pubDate).toLocaleDateString('zh-CN'),
+                            pubDateRaw: new Date(pubDate),
+                            audioUrl,
+                            imageUrl,
+                            categories,
+                            sourceName,
+                            sourceType,
+                            sourceId: source.id
+                        });
+                    });
+                }
+            } catch (error) {
+                console.error(`Error fetching ${source.name}:`, error);
+            }
+        }
+
+        // Render content
+        function renderContent() {
+            let filteredItems = allItems;
+            
+            // Filter by category
+            if (currentCategory !== 'all') {
+                if (['news', 'podcast'].includes(currentCategory)) {
+                    // Filter by source type
+                    filteredItems = filteredItems.filter(item => item.sourceType === currentCategory);
+                } else {
+                    // Filter by content categories
+                    filteredItems = filteredItems.filter(item => 
+                        item.categories && item.categories.some(cat => 
+                            cat.toLowerCase().includes(currentCategory.toLowerCase()) ||
+                            currentCategory.toLowerCase().includes(cat.toLowerCase())
+                        )
+                    );
+                }
+            }
+            
+            // Filter by search
+            if (searchQuery) {
+                filteredItems = filteredItems.filter(item => 
+                    item.title.toLowerCase().includes(searchQuery) ||
+                    item.description.toLowerCase().includes(searchQuery) ||
+                    (item.categories && item.categories.some(cat => cat.toLowerCase().includes(searchQuery)))
+                );
+            }
+            
+            // Sort by date (newest first)
+            filteredItems.sort((a, b) => {
+                const dateA = a.pubDateRaw || new Date(a.pubDate);
+                const dateB = b.pubDateRaw || new Date(b.pubDate);
+                return dateB - dateA;
+            });
+            
+            if (filteredItems.length === 0) {
+                contentGrid.classList.add('hidden');
+                emptyState.classList.remove('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+                contentGrid.classList.remove('hidden');
+                contentGrid.innerHTML = filteredItems.map(item => renderItem(item)).join('');
+            }
+        }
+
+        // Render single item
+        function renderItem(item) {
+            const isPodcast = item.sourceType === 'podcast';
+            
+            // Generate category tags (limit to 3)
+            const categoryTags = item.categories && item.categories.length > 0 
+                ? item.categories.slice(0, 3).map(cat => 
+                    `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">${cat}</span>`
+                  ).join('')
+                : '';
+            
+            return `
+                <article class="card-hover bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden fade-in">
+                    ${item.imageUrl ? `
+                        <div class="relative h-48 overflow-hidden">
+                            <div class="image-loading absolute inset-0"></div>
+                            <img src="${item.imageUrl}" alt="${item.title}" class="w-full h-full object-cover relative z-10" onload="this.previousElementSibling.style.display='none'" onerror="this.style.display='none'; this.previousElementSibling.style.display='none'">
+                            <div class="absolute top-3 left-3 z-20">
+                                <span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium ${isPodcast ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300' : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'}">
+                                    ${isPodcast ? '🎙️ 播客' : '📰 资讯'}
+                                </span>
+                            </div>
+                        </div>
+                    ` : `
+                        <div class="p-5">
+                            <div class="flex items-start justify-between mb-3">
+                                <span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium ${isPodcast ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300' : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'}">
+                                    ${isPodcast ? '🎙️ 播客' : '📰 资讯'}
+                                </span>
+                                <span class="text-xs text-gray-400 dark:text-gray-500">${item.pubDate}</span>
+                            </div>
+                        </div>
+                    `}
+                    
+                    <div class="p-5 ${item.imageUrl ? 'pt-4' : ''}">
+                        ${!item.imageUrl ? `
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="text-xs text-gray-400 dark:text-gray-500">${item.pubDate}</span>
+                                <span class="text-xs text-gray-500 dark:text-gray-400">${item.sourceName}</span>
+                            </div>
+                        ` : `
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs text-gray-400 dark:text-gray-500">${item.pubDate}</span>
+                                <span class="text-xs text-gray-500 dark:text-gray-400">${item.sourceName}</span>
+                            </div>
+                        `}
+                        
+                        <h3 class="font-semibold text-lg mb-2 line-clamp-2 hover:text-blue-500 dark:hover:text-blue-400 cursor-pointer" onclick="window.open('${item.link}', '_blank')">
+                            ${item.title}
+                        </h3>
+                        
+                        <p class="text-sm text-gray-600 dark:text-gray-400 mb-3 line-clamp-3">
+                            ${item.description}
+                        </p>
+                        
+                        ${categoryTags ? `
+                            <div class="flex flex-wrap gap-1 mb-3">
+                                ${categoryTags}
+                            </div>
+                        ` : ''}
+                        
+                        <div class="flex items-center justify-between">
+                            ${isPodcast && item.audioUrl ? `
+                                <div class="flex items-center gap-2 flex-1">
+                                    <audio controls class="audio-player" preload="none">
+                                        <source src="${item.audioUrl}" type="audio/mpeg">
+                                        您的浏览器不支持音频播放
+                                    </audio>
+                                </div>
+                            ` : `
+                                <a href="${item.link}" target="_blank" class="text-sm text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 font-medium">
+                                    阅读更多 →
+                                </a>
+                            `}
+                        </div>
+                    </div>
+                </article>
+            `;
+        }
+
+        // Make deleteSource available globally
+        window.deleteSource = deleteSource;
+
+        // Wait for DOM to be ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+    </script>
+</body>
+</html>
