@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OpenMap - 卫星混合地图与智能导航</title>
+    <title>OpenMap - 就近优先联想搜索与全功能地图</title>
     <!-- MapLibre GL JS -->
     <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
     <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
@@ -12,21 +12,26 @@
         body, html { width: 100%; height: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         #map { width: 100%; height: 100%; }
 
-        /* 顶部悬浮搜索框 */
-        .search-container {
+        /* 顶部悬浮搜索组件与联想下拉框容器 */
+        .search-wrapper {
             position: absolute;
             top: 16px;
             left: 16px;
-            z-index: 20;
+            z-index: 25;
+            width: 390px;
+            max-width: calc(100vw - 32px);
+            transition: transform 0.3s ease;
+        }
+
+        .search-container {
             display: flex;
             align-items: center;
             background: #fff;
-            width: 390px;
-            max-width: calc(100vw - 32px);
+            width: 100%;
             border-radius: 8px;
             box-shadow: 0 2px 6px rgba(0,0,0,0.22);
             padding: 4px 12px;
-            transition: transform 0.3s ease;
+            position: relative;
         }
         .search-container input {
             flex: 1;
@@ -46,6 +51,66 @@
             color: #5f6368;
         }
         .search-container button:hover { color: #1a73e8; }
+
+        /* Google Maps 风格联想建议下拉菜单 */
+        .suggestions-card {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            right: 0;
+            background: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+            max-height: 380px;
+            overflow-y: auto;
+            display: none;
+            z-index: 30;
+        }
+        .suggestions-card.active { display: block; }
+        .suggestion-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 14px;
+            cursor: pointer;
+            border-bottom: 1px solid #f1f3f4;
+            transition: background 0.15s;
+        }
+        .suggestion-item:last-child { border-bottom: none; }
+        .suggestion-item:hover { background: #f8f9fa; }
+        .suggestion-icon {
+            color: #5f6368;
+            flex-shrink: 0;
+        }
+        .suggestion-content {
+            flex: 1;
+            min-width: 0;
+        }
+        .suggestion-title {
+            font-size: 14px;
+            font-weight: 500;
+            color: #202124;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .suggestion-sub {
+            font-size: 12px;
+            color: #70757a;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-top: 2px;
+        }
+        .suggestion-distance {
+            font-size: 12px;
+            font-weight: 600;
+            color: #1a73e8;
+            background: #e8f0fe;
+            padding: 3px 8px;
+            border-radius: 12px;
+            flex-shrink: 0;
+        }
 
         /* 侧边栏 */
         .sidebar {
@@ -218,7 +283,7 @@
             top: 16px;
             left: 50%;
             transform: translateX(-50%) translateY(-140px);
-            z-index: 30;
+            z-index: 35;
             background: #1a73e8;
             color: #fff;
             padding: 14px 22px;
@@ -238,7 +303,7 @@
             color: #fff; padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer;
         }
 
-        /* Google Maps 经典左下角卫星/图层切换器卡片 */
+        /* 左下角卫星切换器 */
         .layer-switcher {
             position: absolute;
             bottom: 24px;
@@ -277,7 +342,6 @@
             font-weight: 500;
         }
 
-        /* GPS 状态小徽章 */
         .status-badge {
             position: absolute;
             bottom: 24px;
@@ -299,16 +363,23 @@
 </head>
 <body>
 
-    <div class="search-container" id="search-bar">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="#5f6368">
-            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-        </svg>
-        <input type="text" id="search-input" placeholder="搜索地点或在地图上点击目标..." />
-        <button id="search-btn" title="搜索">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+    <!-- 顶部搜索框与联想下拉卡片 -->
+    <div class="search-wrapper" id="search-wrapper">
+        <div class="search-container">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="#5f6368">
+                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
             </svg>
-        </button>
+            <input type="text" id="search-input" placeholder="搜索地点，支持就近联想..." autocomplete="off" />
+            <button id="clear-search-btn" title="清空" style="display:none;">✕</button>
+            <button id="search-btn" title="搜索">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                </svg>
+            </button>
+        </div>
+
+        <!-- 联想建议列表 -->
+        <div class="suggestions-card" id="suggestions-card"></div>
     </div>
 
     <!-- 左侧详情与规划侧边栏 -->
@@ -425,7 +496,6 @@
 
         map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
         
-        // 原生定位控制器
         const geolocateControl = new maplibregl.GeolocateControl({
             positionOptions: { enableHighAccuracy: true, timeout: 8000 },
             trackUserLocation: true,
@@ -443,15 +513,20 @@
         let routeSteps = [];
         let myCurrentLocation = null;
         let isNavigating = false;
-        let isSatelliteMode = false; // 是否当前处于卫星混合模式
-        let baseOpaqueLayers = [];   // 记录底图的不透明填充图层（土地、森林、水系多边形）
+        let isSatelliteMode = false;
+        let baseOpaqueLayers = [];
+        let debounceTimer = null;
 
         const sidebar = document.getElementById('poi-sidebar');
         const poiHeaderView = document.getElementById('poi-header-view');
         const poiActionsView = document.getElementById('poi-actions-view');
         const poiDetailsView = document.getElementById('poi-details-view');
         const routingView = document.getElementById('routing-view');
-        const searchBar = document.getElementById('search-bar');
+        const searchWrapper = document.getElementById('search-wrapper');
+        const searchInput = document.getElementById('search-input');
+        const searchBtn = document.getElementById('search-btn');
+        const clearSearchBtn = document.getElementById('clear-search-btn');
+        const suggestionsCard = document.getElementById('suggestions-card');
         const navHud = document.getElementById('nav-hud');
         const gpsDot = document.getElementById('gps-dot');
         const gpsStatusText = document.getElementById('gps-status-text');
@@ -471,7 +546,26 @@
             }
         }
 
-        // 2. 真实 GPS 定位捕获
+        // 大圆距离计算公式（Haversine Distance）
+        function computeDistanceKm(lat1, lon1, lat2, lon2) {
+            const R = 6371; // 地球半径 km
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+
+        function formatDistance(km) {
+            if (km < 1) {
+                return `${Math.round(km * 1000)} 米`;
+            }
+            return `${km.toFixed(1)} 公里`;
+        }
+
+        // 2. 真实 GPS 定位
         function initRealLocation() {
             if (!navigator.geolocation) {
                 gpsStatusText.innerText = '浏览器不支持 GPS';
@@ -505,37 +599,34 @@
                 },
                 (err) => {
                     gpsDot.classList.remove('online');
-                    gpsStatusText.innerText = '未能获取 GPS (支持右键或点击选点)';
-                    if (!myCurrentLocation) myCurrentLocation = [116.3974, 39.9092];
+                    gpsStatusText.innerText = '未获取 GPS (采用地图视野中心定位)';
+                    if (!myCurrentLocation) {
+                        const center = map.getCenter();
+                        myCurrentLocation = [center.lng, center.lat];
+                    }
                 },
                 { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 }
             );
         }
 
-        // 3. 注册底图图层及 Google Maps 卫星切片源
+        // 3. 底图加载与 Google 卫星源配置
         map.on('load', () => {
-            // A. 添加 Google Maps 影像源 (mt1.google.com)
             map.addSource('google-satellite-source', {
                 type: 'raster',
-                tiles: [
-                    'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'
-                ],
+                tiles: ['https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'],
                 tileSize: 256,
                 maxzoom: 20
             });
 
-            // 获取底图的第一个图层 ID，将卫星切片置于最底层
             const firstLayerId = map.getStyle().layers[0].id;
             map.addLayer({
                 id: 'google-satellite-layer',
                 type: 'raster',
                 source: 'google-satellite-source',
-                layout: { 'visibility': 'none' }, // 默认隐藏
+                layout: { 'visibility': 'none' },
                 paint: { 'raster-opacity': 1.0 }
             }, firstLayerId);
 
-            // B. 扫描出所有底层的纯色陆地、水系、公园图层
-            // 当切换到卫星模式时，把这些阻挡卫星图的填充图层设为透明，同时保留 POI、文字和道路
             const layers = map.getStyle().layers;
             baseOpaqueLayers = layers.filter(layer => {
                 const id = layer.id.toLowerCase();
@@ -543,7 +634,6 @@
                        (layer.type === 'fill' && (id.includes('land') || id.includes('water') || id.includes('park') || id.includes('wood') || id.includes('grass'))));
             }).map(l => l.id);
 
-            // C. 添加路线渲染图层
             map.addSource('nav-route-casing', {
                 type: 'geojson',
                 data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } }
@@ -572,42 +662,165 @@
             setTimeout(() => { try { geolocateControl.trigger(); } catch (e) {} }, 600);
         });
 
-        // 4. 核心：Google 卫星模式与标准矢量模式切换
+        // 4. 卫星混合模式切换
         function toggleSatelliteHybridMode() {
             isSatelliteMode = !isSatelliteMode;
-
             if (isSatelliteMode) {
-                // 1. 开启最底层的 Google 卫星影像
                 map.setLayoutProperty('google-satellite-layer', 'visibility', 'visible');
-
-                // 2. 隐藏阻挡卫星的背景色与陆地填充（使 POI、路网、注记无缝贴在卫星图上）
                 baseOpaqueLayers.forEach(layerId => {
-                    if (map.getLayer(layerId)) {
-                        map.setLayoutProperty(layerId, 'visibility', 'none');
-                    }
+                    if (map.getLayer(layerId)) map.setLayoutProperty(layerId, 'visibility', 'none');
                 });
-
-                // 3. 更新切换器 UI 缩略图为“标准地图”
                 switcherLabel.innerText = "地图";
                 switcherThumb.src = "https://a.tile.openstreetmap.org/14/13511/6230.png";
             } else {
-                // 恢复标准模式
                 map.setLayoutProperty('google-satellite-layer', 'visibility', 'none');
-
                 baseOpaqueLayers.forEach(layerId => {
-                    if (map.getLayer(layerId)) {
-                        map.setLayoutProperty(layerId, 'visibility', 'visible');
-                    }
+                    if (map.getLayer(layerId)) map.setLayoutProperty(layerId, 'visibility', 'visible');
                 });
-
                 switcherLabel.innerText = "卫星";
                 switcherThumb.src = "https://mt1.google.com/vt/lyrs=s&x=13511&y=6230&z=14";
             }
         }
-
         document.getElementById('layer-switcher-btn').addEventListener('click', toggleSatelliteHybridMode);
 
-        // 5. 维基百科图文与评分
+        // 5. 核心：就近联想搜索与优先级排序（Autocomplete & Proximity Ranking）
+        async function fetchSuggestions(query) {
+            if (!query.trim()) {
+                suggestionsCard.classList.remove('active');
+                return;
+            }
+
+            // 获取基准参考中心（当前 GPS 坐标或当前视野中心）
+            const center = myCurrentLocation ? { lng: myCurrentLocation[0], lat: myCurrentLocation[1] } : map.getCenter();
+
+            // 构造 ±0.5 度外包矩形（约 50km 范围），赋权优先返回周边候选
+            const delta = 0.5;
+            const viewbox = `${center.lng - delta},${center.lat + delta},${center.lng + delta},${center.lat - delta}`;
+            
+            const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&viewbox=${viewbox}&bounded=0&limit=10&addressdetails=1`;
+
+            try {
+                const res = await fetch(url);
+                const results = await res.json();
+
+                if (!results || results.length === 0) {
+                    suggestionsCard.innerHTML = `<div style="padding:14px; color:#70757a; font-size:13px; text-align:center;">未找到匹配联想地点</div>`;
+                    suggestionsCard.classList.add('active');
+                    return;
+                }
+
+                // 计算每个结果与用户当前的真实直线距离并附加在对象中
+                results.forEach(item => {
+                    item._lat = parseFloat(item.lat);
+                    item._lon = parseFloat(item.lon);
+                    item._distanceKm = computeDistanceKm(center.lat, center.lng, item._lat, item._lon);
+                });
+
+                // 优先排序机制：严格按照距离升序排列（越近越靠前）
+                results.sort((a, b) => a._distanceKm - b._distanceKm);
+
+                // 渲染联想列表
+                renderSuggestions(results);
+            } catch (err) {
+                console.error('联想检索失败:', err);
+            }
+        }
+
+        function renderSuggestions(items) {
+            suggestionsCard.innerHTML = '';
+            items.forEach(item => {
+                const row = document.createElement('div');
+                row.className = 'suggestion-item';
+
+                // 提取主要名称和副地址描述
+                const parts = item.display_name.split(',');
+                const title = parts[0];
+                const subtitle = parts.slice(1, 4).join(',').trim() || item.display_name;
+                const distText = formatDistance(item._distanceKm);
+
+                row.innerHTML = `
+                    <div class="suggestion-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                        </svg>
+                    </div>
+                    <div class="suggestion-content">
+                        <div class="suggestion-title">${title}</div>
+                        <div class="suggestion-sub">${subtitle}</div>
+                    </div>
+                    <div class="suggestion-distance">${distText}</div>
+                `;
+
+                // 点击联想条目：直接选中、定位并渲染详情
+                row.addEventListener('click', () => {
+                    suggestionsCard.classList.remove('active');
+                    searchInput.value = title;
+                    selectPlaceResult(item);
+                });
+
+                suggestionsCard.appendChild(row);
+            });
+            suggestionsCard.classList.add('active');
+        }
+
+        function selectPlaceResult(item) {
+            const lng = item._lon;
+            const lat = item._lat;
+
+            targetMarker.setLngLat([lng, lat]).addTo(map);
+            map.flyTo({
+                center: [lng, lat],
+                padding: { left: getLeftPadding(), top: 0, right: 0, bottom: 0 },
+                zoom: 16,
+                pitch: 35,
+                duration: 1000
+            });
+
+            renderPOIDetails(item.display_name.split(',')[0], item.type || '地点', item.display_name, lat, lng);
+        }
+
+        // 输入框防抖监听（250ms）
+        searchInput.addEventListener('input', (e) => {
+            const val = e.target.value;
+            clearSearchBtn.style.display = val ? 'block' : 'none';
+
+            if (debounceTimer) clearTimeout(debounceTimer);
+            if (!val.trim()) {
+                suggestionsCard.classList.remove('active');
+                return;
+            }
+
+            debounceTimer = setTimeout(() => {
+                fetchSuggestions(val);
+            }, 250);
+        });
+
+        clearSearchBtn.addEventListener('click', () => {
+            searchInput.value = '';
+            clearSearchBtn.style.display = 'none';
+            suggestionsCard.classList.remove('active');
+            searchInput.focus();
+        });
+
+        // 点击页面外部区域自动收起联想列表
+        document.addEventListener('click', (e) => {
+            if (!searchWrapper.contains(e.target)) {
+                suggestionsCard.classList.remove('active');
+            }
+        });
+
+        searchBtn.addEventListener('click', () => {
+            const query = searchInput.value.trim();
+            if (query) fetchSuggestions(query);
+        });
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                const query = searchInput.value.trim();
+                if (query) fetchSuggestions(query);
+            }
+        });
+
+        // 6. 百科图文与评分
         async function fetchWikiInfo(placeName) {
             try {
                 const cleanTitle = placeName.split('(')[0].split('（')[0].trim();
@@ -661,11 +874,11 @@
             }
         }
 
-        // 6. 路线规划
+        // 7. 路线规划
         async function calculateRoute() {
             if (!currentTargetCoord) return;
             if (!myCurrentLocation) {
-                alert('正在获取您的 GPS 定位，请稍候...');
+                alert('正在同步当前 GPS 定位，请稍候...');
                 return;
             }
 
@@ -712,13 +925,13 @@
             }
         }
 
-        // 7. 实时第一人称导航
+        // 8. 实时第一人称导航
         function startLiveNavigation() {
             if (routeCoordinates.length < 2) return;
             isNavigating = true;
 
             sidebar.classList.remove('active');
-            searchBar.style.transform = 'translateY(-100px)';
+            searchWrapper.style.transform = 'translateY(-100px)';
             navHud.classList.add('active');
 
             map.easeTo({
@@ -734,12 +947,12 @@
         function stopLiveNavigation() {
             isNavigating = false;
             navHud.classList.remove('active');
-            searchBar.style.transform = 'translateY(0)';
+            searchWrapper.style.transform = 'translateY(0)';
             sidebar.classList.add('active');
             map.easeTo({ pitch: 0, bearing: 0, padding: { left: getLeftPadding(), top: 0, right: 0, bottom: 0 }, duration: 600 });
         }
 
-        // 8. 视图与事件控制
+        // 9. 视图与事件控制
         function switchToPOIMode() {
             document.getElementById('poi-cover').style.display = 'block';
             poiHeaderView.style.display = 'block';
@@ -785,9 +998,10 @@
             navigator.clipboard.writeText(text).then(() => alert(`已复制坐标: ${text}`));
         });
 
-        // 点击地图选点（在卫星模式与标准模式下皆可直接穿透捕获）
+        // 点击地图点选 POI
         map.on('click', async (e) => {
             if (isNavigating) return;
+            suggestionsCard.classList.remove('active');
             const { lng, lat } = e.lngLat;
             targetMarker.setLngLat([lng, lat]).addTo(map);
             map.easeTo({ center: [lng, lat], padding: { left: getLeftPadding(), top: 0, right: 0, bottom: 0 }, duration: 350 });
@@ -813,27 +1027,6 @@
                 renderPOIDetails(directName || '已选定地点', '地图坐标', '未知地址', lat, lng);
             }
         });
-
-        // 搜索联动
-        async function executeSearch() {
-            const query = document.getElementById('search-input').value.trim();
-            if (!query) return;
-
-            try {
-                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
-                const data = await res.json();
-                if (data && data.length > 0) {
-                    const item = data[0];
-                    const lng = parseFloat(item.lon), lat = parseFloat(item.lat);
-                    targetMarker.setLngLat([lng, lat]).addTo(map);
-                    map.flyTo({ center: [lng, lat], padding: { left: getLeftPadding(), top: 0, right: 0, bottom: 0 }, zoom: 15, pitch: 35 });
-                    renderPOIDetails(item.display_name.split(',')[0], item.type || '地点', item.display_name, lat, lng);
-                }
-            } catch (e) { console.error(e); }
-        }
-
-        document.getElementById('search-btn').addEventListener('click', executeSearch);
-        document.getElementById('search-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') executeSearch(); });
     </script>
 </body>
 </html>
