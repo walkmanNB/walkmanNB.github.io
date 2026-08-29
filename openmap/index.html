@@ -3,7 +3,8 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OpenMap - 实时定位与真实GPS导航</title>
+    <title>OpenMap - 卫星混合地图与智能导航</title>
+    <!-- MapLibre GL JS -->
     <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
     <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
     <style>
@@ -170,7 +171,7 @@
         .info-row { display: flex; align-items: flex-start; gap: 16px; font-size: 14px; color: #3c4043; line-height: 1.4; }
         .info-row svg { flex-shrink: 0; color: #5f6368; margin-top: 2px; }
 
-        /* 路线面板 */
+        /* 路线规划面板 */
         .routing-view {
             display: none;
             padding: 16px 20px;
@@ -237,16 +238,62 @@
             color: #fff; padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer;
         }
 
-        /* 底部 GPS 状态徽章 */
+        /* Google Maps 经典左下角卫星/图层切换器卡片 */
+        .layer-switcher {
+            position: absolute;
+            bottom: 24px;
+            left: 16px;
+            z-index: 10;
+            width: 72px;
+            height: 72px;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            cursor: pointer;
+            border: 2px solid #ffffff;
+            transition: all 0.2s ease;
+            background: #fff;
+        }
+        .layer-switcher:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+        }
+        .layer-switcher img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .layer-switcher-label {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.6);
+            color: #fff;
+            font-size: 11px;
+            text-align: center;
+            padding: 2px 0;
+            font-weight: 500;
+        }
+
+        /* GPS 状态小徽章 */
         .status-badge {
-            position: absolute; bottom: 24px; left: 16px; z-index: 10;
-            background: rgba(255, 255, 255, 0.95); padding: 7px 16px;
-            border-radius: 20px; font-size: 12px; color: #3c4043; box-shadow: 0 1px 4px rgba(0,0,0,0.15);
-            display: flex; align-items: center; gap: 8px;
+            position: absolute;
+            bottom: 24px;
+            left: 100px;
+            z-index: 10;
+            background: rgba(255, 255, 255, 0.92);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            color: #3c4043;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
-        .gps-indicator {
-            width: 8px; height: 8px; border-radius: 50%; background: #ea4335;
-        }
+        .gps-indicator { width: 8px; height: 8px; border-radius: 50%; background: #ea4335; }
         .gps-indicator.online { background: #34a853; }
     </style>
 </head>
@@ -264,6 +311,7 @@
         </button>
     </div>
 
+    <!-- 左侧详情与规划侧边栏 -->
     <div class="sidebar" id="poi-sidebar">
         <div class="poi-media-cover" id="poi-cover">
             <img id="cover-img" src="" alt="POI 图片" />
@@ -341,6 +389,7 @@
         </div>
     </div>
 
+    <!-- 顶部实时导航 HUD -->
     <div class="nav-hud" id="nav-hud">
         <div style="font-size: 28px;" id="hud-icon">⬆️</div>
         <div>
@@ -350,9 +399,15 @@
         <button class="exit-nav-btn" id="exit-nav-btn">退出导航</button>
     </div>
 
-    <div class="status-badge" id="gps-status-badge">
+    <!-- Google 风格左下角图层切换器 -->
+    <div class="layer-switcher" id="layer-switcher-btn" title="切换到卫星地图">
+        <img id="switcher-thumb" src="https://mt1.google.com/vt/lyrs=s&x=13511&y=6230&z=14" alt="切换图层" />
+        <div class="layer-switcher-label" id="switcher-label">卫星</div>
+    </div>
+
+    <div class="status-badge">
         <span class="gps-indicator" id="gps-dot"></span>
-        <span id="gps-status-text">正在初始化真实 GPS 定位...</span>
+        <span id="gps-status-text">正在定位中...</span>
     </div>
 
     <div id="map"></div>
@@ -363,14 +418,14 @@
             container: 'map',
             style: 'https://tiles.openfreemap.org/styles/liberty',
             center: [116.3974, 39.9092],
-            zoom: 12,
+            zoom: 13,
             pitch: 0,
             antialias: true
         });
 
         map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
         
-        // 核心：添加原生高精度 Geolocation 控制器并自动激活
+        // 原生定位控制器
         const geolocateControl = new maplibregl.GeolocateControl({
             positionOptions: { enableHighAccuracy: true, timeout: 8000 },
             trackUserLocation: true,
@@ -380,15 +435,16 @@
 
         let targetMarker = new maplibregl.Marker({ color: '#ea4335' });
 
-        // 数据状态
+        // 状态管理
         let currentTargetCoord = null;
         let currentTargetName = '';
         let currentMode = 'driving';
         let routeCoordinates = [];
         let routeSteps = [];
-        let myCurrentLocation = null; // 真实物理位置
-        let geoWatchId = null;
+        let myCurrentLocation = null;
         let isNavigating = false;
+        let isSatelliteMode = false; // 是否当前处于卫星混合模式
+        let baseOpaqueLayers = [];   // 记录底图的不透明填充图层（土地、森林、水系多边形）
 
         const sidebar = document.getElementById('poi-sidebar');
         const poiHeaderView = document.getElementById('poi-header-view');
@@ -399,6 +455,8 @@
         const navHud = document.getElementById('nav-hud');
         const gpsDot = document.getElementById('gps-dot');
         const gpsStatusText = document.getElementById('gps-status-text');
+        const switcherThumb = document.getElementById('switcher-thumb');
+        const switcherLabel = document.getElementById('switcher-label');
 
         function getLeftPadding() {
             return window.innerWidth > 600 ? 410 : 0;
@@ -413,14 +471,13 @@
             }
         }
 
-        // 2. 真实 GPS 定位捕获机制
+        // 2. 真实 GPS 定位捕获
         function initRealLocation() {
             if (!navigator.geolocation) {
-                gpsStatusText.innerText = '当前浏览器不支持 GPS 定位';
+                gpsStatusText.innerText = '浏览器不支持 GPS';
                 return;
             }
 
-            // 监听真实定位
             navigator.geolocation.watchPosition(
                 (pos) => {
                     const lng = pos.coords.longitude;
@@ -429,14 +486,12 @@
                     myCurrentLocation = [lng, lat];
 
                     gpsDot.classList.add('online');
-                    gpsStatusText.innerText = `GPS 定位就绪 (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+                    gpsStatusText.innerText = `GPS 已就绪 (${lat.toFixed(3)}, ${lng.toFixed(3)})`;
 
-                    // 第一次定位成功时，将视野自动平滑居中到当前真实位置
                     if (isFirstLoc) {
                         map.flyTo({ center: [lng, lat], zoom: 15, duration: 1200 });
                     }
 
-                    // 如果正在导航，持续更新相机与位置
                     if (isNavigating) {
                         const heading = pos.coords.heading || 0;
                         map.easeTo({
@@ -450,20 +505,45 @@
                 },
                 (err) => {
                     gpsDot.classList.remove('online');
-                    if (location.protocol === 'file:') {
-                        gpsStatusText.innerText = '请通过 http://localhost 打开以获取 GPS 权限';
-                    } else {
-                        gpsStatusText.innerText = '未能获取 GPS 定位权限 (已开启点选模式)';
-                    }
-                    // 兜底默认位置
+                    gpsStatusText.innerText = '未能获取 GPS (支持右键或点击选点)';
                     if (!myCurrentLocation) myCurrentLocation = [116.3974, 39.9092];
                 },
                 { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 }
             );
         }
 
-        // 3. 地图就绪
+        // 3. 注册底图图层及 Google Maps 卫星切片源
         map.on('load', () => {
+            // A. 添加 Google Maps 影像源 (mt1.google.com)
+            map.addSource('google-satellite-source', {
+                type: 'raster',
+                tiles: [
+                    'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'
+                ],
+                tileSize: 256,
+                maxzoom: 20
+            });
+
+            // 获取底图的第一个图层 ID，将卫星切片置于最底层
+            const firstLayerId = map.getStyle().layers[0].id;
+            map.addLayer({
+                id: 'google-satellite-layer',
+                type: 'raster',
+                source: 'google-satellite-source',
+                layout: { 'visibility': 'none' }, // 默认隐藏
+                paint: { 'raster-opacity': 1.0 }
+            }, firstLayerId);
+
+            // B. 扫描出所有底层的纯色陆地、水系、公园图层
+            // 当切换到卫星模式时，把这些阻挡卫星图的填充图层设为透明，同时保留 POI、文字和道路
+            const layers = map.getStyle().layers;
+            baseOpaqueLayers = layers.filter(layer => {
+                const id = layer.id.toLowerCase();
+                return (layer.type === 'background' || 
+                       (layer.type === 'fill' && (id.includes('land') || id.includes('water') || id.includes('park') || id.includes('wood') || id.includes('grass'))));
+            }).map(l => l.id);
+
+            // C. 添加路线渲染图层
             map.addSource('nav-route-casing', {
                 type: 'geojson',
                 data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } }
@@ -488,14 +568,46 @@
                 paint: { 'line-color': '#4285f4', 'line-width': 5, 'line-opacity': 0.95 }
             });
 
-            // 启动定位
             initRealLocation();
-            setTimeout(() => {
-                try { geolocateControl.trigger(); } catch (e) {}
-            }, 600);
+            setTimeout(() => { try { geolocateControl.trigger(); } catch (e) {} }, 600);
         });
 
-        // 4. 百科图文与评分
+        // 4. 核心：Google 卫星模式与标准矢量模式切换
+        function toggleSatelliteHybridMode() {
+            isSatelliteMode = !isSatelliteMode;
+
+            if (isSatelliteMode) {
+                // 1. 开启最底层的 Google 卫星影像
+                map.setLayoutProperty('google-satellite-layer', 'visibility', 'visible');
+
+                // 2. 隐藏阻挡卫星的背景色与陆地填充（使 POI、路网、注记无缝贴在卫星图上）
+                baseOpaqueLayers.forEach(layerId => {
+                    if (map.getLayer(layerId)) {
+                        map.setLayoutProperty(layerId, 'visibility', 'none');
+                    }
+                });
+
+                // 3. 更新切换器 UI 缩略图为“标准地图”
+                switcherLabel.innerText = "地图";
+                switcherThumb.src = "https://a.tile.openstreetmap.org/14/13511/6230.png";
+            } else {
+                // 恢复标准模式
+                map.setLayoutProperty('google-satellite-layer', 'visibility', 'none');
+
+                baseOpaqueLayers.forEach(layerId => {
+                    if (map.getLayer(layerId)) {
+                        map.setLayoutProperty(layerId, 'visibility', 'visible');
+                    }
+                });
+
+                switcherLabel.innerText = "卫星";
+                switcherThumb.src = "https://mt1.google.com/vt/lyrs=s&x=13511&y=6230&z=14";
+            }
+        }
+
+        document.getElementById('layer-switcher-btn').addEventListener('click', toggleSatelliteHybridMode);
+
+        // 5. 维基百科图文与评分
         async function fetchWikiInfo(placeName) {
             try {
                 const cleanTitle = placeName.split('(')[0].split('（')[0].trim();
@@ -549,7 +661,7 @@
             }
         }
 
-        // 5. 路线规划：严格以当前真实物理位置为起点
+        // 6. 路线规划
         async function calculateRoute() {
             if (!currentTargetCoord) return;
             if (!myCurrentLocation) {
@@ -571,15 +683,12 @@
                 routeCoordinates = route.geometry.coordinates;
                 routeSteps = route.legs[0].steps;
 
-                // 绘制路线
                 map.getSource('nav-route-casing').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: routeCoordinates } });
                 map.getSource('nav-route-line').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: routeCoordinates } });
 
-                // 自适应视野
                 const bounds = routeCoordinates.reduce((b, c) => b.extend(c), new maplibregl.LngLatBounds(routeCoordinates[0], routeCoordinates[0]));
                 map.fitBounds(bounds, { padding: { top: 80, bottom: 80, left: getLeftPadding() + 40, right: 60 }, maxZoom: 16 });
 
-                // 耗时与步骤
                 document.getElementById('route-time-val').innerText = `${Math.round(route.duration / 60)} 分钟`;
                 document.getElementById('route-dist-val').innerText = `${(route.distance / 1000).toFixed(1)} 公里 · 基于当前位置`;
 
@@ -588,7 +697,7 @@
                 routeSteps.forEach((step, idx) => {
                     const stepEl = document.createElement('div');
                     stepEl.className = 'step-item';
-                    const roadName = step.name || '当前道路';
+                    const roadName = step.name || '道路';
                     const action = step.maneuver.type === 'depart' ? '从当前位置出发' :
                                    step.maneuver.type === 'arrive' ? '到达目的地' :
                                    `向 ${step.maneuver.modifier || '前方'} 转入 ${roadName}`;
@@ -603,7 +712,7 @@
             }
         }
 
-        // 6. 开启实时 GPS 真实追踪导航
+        // 7. 实时第一人称导航
         function startLiveNavigation() {
             if (routeCoordinates.length < 2) return;
             isNavigating = true;
@@ -619,7 +728,7 @@
                 duration: 800
             });
 
-            speak(`导航开始，前往 ${currentTargetName}。正在通过 GPS 实时跟踪`);
+            speak(`导航开始，前往 ${currentTargetName}`);
         }
 
         function stopLiveNavigation() {
@@ -630,7 +739,7 @@
             map.easeTo({ pitch: 0, bearing: 0, padding: { left: getLeftPadding(), top: 0, right: 0, bottom: 0 }, duration: 600 });
         }
 
-        // 7. 视图与事件控制
+        // 8. 视图与事件控制
         function switchToPOIMode() {
             document.getElementById('poi-cover').style.display = 'block';
             poiHeaderView.style.display = 'block';
@@ -676,7 +785,7 @@
             navigator.clipboard.writeText(text).then(() => alert(`已复制坐标: ${text}`));
         });
 
-        // 点击地图选点
+        // 点击地图选点（在卫星模式与标准模式下皆可直接穿透捕获）
         map.on('click', async (e) => {
             if (isNavigating) return;
             const { lng, lat } = e.lngLat;
