@@ -1,0 +1,2399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Dou Dizhu (鬥地主)</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Three.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Inter:wght@400;600;700;900&family=Ma+Shan+Zheng&display=swap');
+    
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      user-select: none;
+      font-family: 'Inter', sans-serif;
+      background-color: #0b0f19;
+      color: #f3f4f6;
+    }
+
+    .chinese-font {
+      font-family: 'Ma Shan Zheng', cursive, sans-serif;
+    }
+
+    .display-font {
+      font-family: 'Cinzel', serif;
+    }
+
+    #canvas-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.82);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.6), 0 0 20px rgba(234, 179, 8, 0.08);
+    }
+
+    .glass-btn {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05));
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .glass-btn:hover:not(:disabled) {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.12));
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+    }
+    .glass-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+
+    .glow-gold {
+      box-shadow: 0 0 25px rgba(234, 179, 8, 0.45);
+    }
+
+    .gold-gradient-text {
+      background: linear-gradient(135deg, #fef08a, #eab308, #ca8a04);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    /* Custom scrollbar for cheat modal */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.2);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(234, 179, 8, 0.4);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(234, 179, 8, 0.7);
+    }
+  </style>
+</head>
+<body class="relative w-full h-full select-none">
+
+  <!-- 3D Viewport -->
+  <div id="canvas-container"></div>
+
+  <!-- HUD Layer -->
+  <div id="hud" class="absolute inset-0 pointer-events-none z-10 flex flex-col justify-between p-3 sm:p-5">
+    
+    <!-- Top Header Bar -->
+    <div class="flex items-center justify-between w-full pointer-events-auto">
+      <!-- User Profile & Room Info -->
+      <div class="flex items-center gap-3">
+        <div class="glass-panel px-3 py-2 rounded-2xl flex items-center gap-3 border-amber-500/30">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-600 to-yellow-400 flex items-center justify-center text-slate-950 font-black shadow-lg">
+            <i class="fa-solid fa-user-ninja text-lg"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span id="player-role-badge" class="px-2 py-0.5 text-xs font-bold rounded-md bg-slate-700 text-slate-300">Peasant</span>
+              <span id="current-room-name" class="text-xs text-amber-300 font-semibold tracking-wide">Bronze Room</span>
+            </div>
+            <div class="flex items-center gap-1.5 mt-0.5">
+              <i class="fa-solid fa-coins text-yellow-400 text-xs"></i>
+              <span id="user-coins" class="text-sm font-black tracking-wider text-yellow-200">5,000</span>
+            </div>
+          </div>
+        </div>
+
+        <button id="btn-return-lobby" class="glass-btn px-3 py-2 rounded-xl text-xs font-bold text-slate-300 hover:text-white flex items-center gap-1.5">
+          <i class="fa-solid fa-door-open"></i>
+          <span class="hidden sm:inline">Lobby</span>
+        </button>
+      </div>
+
+      <!-- Center Di Pai (Hole Cards) Box -->
+      <div id="di-pai-box" class="glass-panel px-3 py-2 rounded-2xl flex flex-col items-center border-amber-500/20">
+        <div class="text-[10px] uppercase font-bold text-amber-400/90 tracking-widest mb-1 flex items-center gap-1">
+          <i class="fa-solid fa-shield-halved text-[10px]"></i>
+          <span>Three Hole Cards (底牌)</span>
+        </div>
+        <div id="di-pai-cards-preview" class="flex gap-1.5 h-10 items-center justify-center">
+          <div class="w-7 h-10 rounded bg-amber-950/40 border border-amber-500/40 flex items-center justify-center text-xs font-bold text-amber-500">?</div>
+          <div class="w-7 h-10 rounded bg-amber-950/40 border border-amber-500/40 flex items-center justify-center text-xs font-bold text-amber-500">?</div>
+          <div class="w-7 h-10 rounded bg-amber-950/40 border border-amber-500/40 flex items-center justify-center text-xs font-bold text-amber-500">?</div>
+        </div>
+      </div>
+
+      <!-- Game Status & Multipliers & Cheat Button -->
+      <div class="flex items-center gap-2">
+        <div class="glass-panel px-3 py-2 rounded-2xl flex items-center gap-3">
+          <div class="text-right">
+            <div class="text-[10px] text-slate-400 uppercase font-semibold">Stake Multiplier</div>
+            <div class="text-sm font-black text-amber-400 flex items-center justify-end gap-1">
+              <i class="fa-solid fa-bolt text-xs"></i>
+              <span id="multiplier-badge">x1</span>
+            </div>
+          </div>
+          <div class="h-6 w-[1px] bg-slate-700"></div>
+          <div class="text-right">
+            <div class="text-[10px] text-slate-400 uppercase font-semibold">Base Bet</div>
+            <div id="room-base-bet" class="text-sm font-bold text-slate-200">50</div>
+          </div>
+        </div>
+
+        <button id="btn-sound-toggle" class="glass-btn w-10 h-10 rounded-2xl flex items-center justify-center text-slate-300 hover:text-white" title="Toggle Sound">
+          <i id="sound-icon" class="fa-solid fa-volume-high"></i>
+        </button>
+
+        <!-- Subtle Developer Cheat Hotkey Button -->
+        <button id="btn-cheat-toggle" class="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/30 hover:border-amber-400 flex items-center justify-center shadow-lg transition-all" title="Secret Developer Menu (Hotkey: C)">
+          <i class="fa-solid fa-terminal text-sm"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Opponent 1 (Left AI) Floating Status -->
+    <div id="ai-left-panel" class="absolute left-4 sm:left-8 top-1/3 -translate-y-1/2 pointer-events-none transition-all duration-300">
+      <div class="glass-panel px-3 py-2.5 rounded-2xl border-cyan-500/30 flex items-center gap-3 shadow-xl">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-600 to-blue-400 flex items-center justify-center text-slate-950 font-bold shadow">
+          <i class="fa-solid fa-robot"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-1.5">
+            <span class="text-xs font-bold text-cyan-200">AI Left</span>
+            <span id="ai-left-role" class="px-1.5 py-0.2 text-[10px] rounded bg-slate-800 text-slate-300 font-semibold">Peasant</span>
+          </div>
+          <div class="text-xs text-slate-300 flex items-center gap-2 mt-0.5">
+            <span>Cards: <strong id="ai-left-count" class="text-cyan-300 font-bold">17</strong></span>
+          </div>
+        </div>
+      </div>
+      <div id="ai-left-bubble" class="hidden mt-2 bg-slate-900/90 text-amber-300 border border-amber-500/40 text-xs px-3 py-1.5 rounded-xl font-bold shadow-lg text-center animate-bounce">
+        Thinking...
+      </div>
+    </div>
+
+    <!-- Opponent 2 (Right AI) Floating Status -->
+    <div id="ai-right-panel" class="absolute right-4 sm:right-8 top-1/3 -translate-y-1/2 pointer-events-none transition-all duration-300">
+      <div class="glass-panel px-3 py-2.5 rounded-2xl border-purple-500/30 flex items-center gap-3 shadow-xl">
+        <div>
+          <div class="flex items-center justify-end gap-1.5">
+            <span id="ai-right-role" class="px-1.5 py-0.2 text-[10px] rounded bg-slate-800 text-slate-300 font-semibold">Peasant</span>
+            <span class="text-xs font-bold text-purple-200">AI Right</span>
+          </div>
+          <div class="text-xs text-slate-300 flex items-center justify-end gap-2 mt-0.5">
+            <span>Cards: <strong id="ai-right-count" class="text-purple-300 font-bold">17</strong></span>
+          </div>
+        </div>
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-purple-600 to-pink-400 flex items-center justify-center text-slate-950 font-bold shadow">
+          <i class="fa-solid fa-ghost"></i>
+        </div>
+      </div>
+      <div id="ai-right-bubble" class="hidden mt-2 bg-slate-900/90 text-amber-300 border border-amber-500/40 text-xs px-3 py-1.5 rounded-xl font-bold shadow-lg text-center animate-bounce">
+        Thinking...
+      </div>
+    </div>
+
+    <!-- Central Notification Banner (Turn & Combination alerts) -->
+    <div class="w-full flex justify-center pointer-events-none">
+      <div id="center-toast" class="opacity-0 transition-all duration-300 transform scale-95 glass-panel px-6 py-2.5 rounded-full border-amber-400/50 text-amber-300 font-bold tracking-wide text-sm shadow-2xl flex items-center gap-2">
+        <i class="fa-solid fa-circle-info text-amber-400"></i>
+        <span id="center-toast-msg">Game Started</span>
+      </div>
+    </div>
+
+    <!-- Bottom User Action Bar -->
+    <div class="w-full flex flex-col items-center pb-2 pointer-events-auto">
+      <!-- Bidding Controls Panel (Call / Rob Landlord) -->
+      <div id="bidding-bar" class="hidden glass-panel px-4 py-3 rounded-2xl flex-wrap items-center justify-center gap-3 border-amber-500/30 shadow-2xl mb-2">
+        <span class="text-xs font-bold text-amber-300 mr-2 flex items-center gap-1">
+          <i class="fa-solid fa-crown"></i> Landlord Bidding:
+        </span>
+        <button id="bid-btn-0" class="glass-btn px-4 py-2 rounded-xl text-xs font-bold text-slate-300 hover:text-red-400 border-red-500/30">
+          Pass (不叫)
+        </button>
+        <button id="bid-btn-1" class="glass-btn px-4 py-2 rounded-xl text-xs font-bold text-amber-200 border-amber-500/30 hover:bg-amber-500/20">
+          1 Point (1分)
+        </button>
+        <button id="bid-btn-2" class="glass-btn px-4 py-2 rounded-xl text-xs font-bold text-amber-300 border-amber-500/40 hover:bg-amber-500/30">
+          2 Points (2分)
+        </button>
+        <button id="bid-btn-3" class="glass-btn px-5 py-2 rounded-xl text-xs font-black text-amber-400 border-amber-400/60 bg-amber-500/20 hover:bg-amber-500/40">
+          3 Points (3分)
+        </button>
+      </div>
+
+      <!-- Trick Playing Controls Panel -->
+      <div id="action-bar" class="hidden glass-panel px-4 py-3 rounded-2xl flex items-center justify-center gap-3 border-amber-500/30 shadow-2xl mb-2">
+        <button id="btn-hint" class="glass-btn px-4 py-2 rounded-xl text-xs font-bold text-cyan-300 border-cyan-500/30 flex items-center gap-1.5">
+          <i class="fa-regular fa-lightbulb"></i> Hint (提示)
+        </button>
+        <button id="btn-pass" class="glass-btn px-4 py-2 rounded-xl text-xs font-bold text-slate-300 hover:text-red-300 border-slate-600 flex items-center gap-1.5">
+          <i class="fa-solid fa-forward"></i> Pass (不出)
+        </button>
+        <button id="btn-play" class="px-6 py-2 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 shadow-lg shadow-amber-500/30 hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5">
+          <i class="fa-solid fa-play"></i> Play Cards (出牌)
+        </button>
+      </div>
+
+      <div class="text-[11px] text-slate-400 font-medium bg-slate-900/60 px-3 py-1 rounded-full border border-white/5 backdrop-blur-sm">
+        💡 Click on your cards to select/deselect them. Press <kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-600 rounded text-amber-300 font-mono">C</kbd> to open Developer Menu.
+      </div>
+    </div>
+  </div>
+
+  <!-- Lobby / Room Select Overlay -->
+  <div id="lobby-screen" class="absolute inset-0 bg-slate-950/90 backdrop-blur-md z-30 flex items-center justify-center p-4">
+    <div class="max-w-3xl w-full glass-panel rounded-3xl p-6 sm:p-8 border-amber-500/30 text-center relative overflow-hidden">
+      <div class="absolute -right-16 -top-16 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
+      <div class="absolute -left-16 -bottom-16 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+      <h1 class="text-4xl sm:text-5xl font-black chinese-font tracking-wider gold-gradient-text mb-1">
+        鬥地主 <span class="text-xl sm:text-2xl display-font font-bold text-amber-200">Fight the Landlord 3D</span>
+      </h1>
+      <p class="text-slate-400 text-sm max-w-lg mx-auto mb-6">
+        Classic 3-Player Dou Dizhu card game rendered in real-time 3D. Climb the stakes ladder from Bronze to High-Roller VIP!
+      </p>
+
+      <!-- Player Balance Status -->
+      <div class="inline-flex items-center gap-3 px-5 py-2 rounded-2xl bg-slate-900/80 border border-amber-500/40 mb-8 shadow-inner">
+        <span class="text-xs text-slate-400 uppercase font-semibold">Your Bankroll:</span>
+        <div class="flex items-center gap-1.5 text-yellow-400 font-black text-lg">
+          <i class="fa-solid fa-coins"></i>
+          <span id="lobby-user-coins">5,000</span>
+        </div>
+        <button id="btn-claim-bonus" class="ml-3 px-2.5 py-1 text-xs font-bold rounded-lg bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30 border border-yellow-500/30">
+          +1,000 Bonus
+        </button>
+      </div>
+
+      <!-- Room Selection Grid -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <!-- Room 1: Bronze -->
+        <div class="room-card glass-panel p-4 rounded-2xl border-amber-500/30 hover:border-amber-400 transition-all cursor-pointer flex flex-col justify-between group hover:scale-105" data-room="bronze">
+          <div>
+            <div class="w-12 h-12 rounded-xl bg-gradient-to-tr from-amber-700 to-amber-500 flex items-center justify-center text-2xl mb-3 mx-auto shadow-md group-hover:rotate-6 transition-transform">
+              🥉
+            </div>
+            <h3 class="text-base font-bold text-amber-200">Bronze Room</h3>
+            <p class="text-xs text-slate-400 mt-1">Casual & Relaxed</p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800">
+            <div class="text-xs text-slate-400">Base Bet: <strong class="text-slate-200">50</strong></div>
+            <div class="text-xs text-amber-400 font-semibold mt-0.5">Min Coins: 200</div>
+          </div>
+        </div>
+
+        <!-- Room 2: Silver -->
+        <div class="room-card glass-panel p-4 rounded-2xl border-slate-400/30 hover:border-slate-300 transition-all cursor-pointer flex flex-col justify-between group hover:scale-105" data-room="silver">
+          <div>
+            <div class="w-12 h-12 rounded-xl bg-gradient-to-tr from-slate-400 to-slate-200 text-slate-900 flex items-center justify-center text-2xl mb-3 mx-auto shadow-md group-hover:rotate-6 transition-transform">
+              🥈
+            </div>
+            <h3 class="text-base font-bold text-slate-200">Silver Room</h3>
+            <p class="text-xs text-slate-400 mt-1">Strategic Masters</p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800">
+            <div class="text-xs text-slate-400">Base Bet: <strong class="text-slate-200">200</strong></div>
+            <div class="text-xs text-amber-400 font-semibold mt-0.5">Min Coins: 1,000</div>
+          </div>
+        </div>
+
+        <!-- Room 3: Gold -->
+        <div class="room-card glass-panel p-4 rounded-2xl border-yellow-500/40 hover:border-yellow-300 transition-all cursor-pointer flex flex-col justify-between group hover:scale-105" data-room="gold">
+          <div>
+            <div class="w-12 h-12 rounded-xl bg-gradient-to-tr from-yellow-500 to-amber-300 text-slate-950 flex items-center justify-center text-2xl mb-3 mx-auto shadow-md group-hover:rotate-6 transition-transform">
+              🥇
+            </div>
+            <h3 class="text-base font-bold text-yellow-300">Gold Room</h3>
+            <p class="text-xs text-slate-400 mt-1">High Stakes Action</p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800">
+            <div class="text-xs text-slate-400">Base Bet: <strong class="text-slate-200">1,000</strong></div>
+            <div class="text-xs text-amber-400 font-semibold mt-0.5">Min Coins: 5,000</div>
+          </div>
+        </div>
+
+        <!-- Room 4: VIP -->
+        <div class="room-card glass-panel p-4 rounded-2xl border-purple-500/40 hover:border-pink-400 transition-all cursor-pointer flex flex-col justify-between group hover:scale-105" data-room="vip">
+          <div>
+            <div class="w-12 h-12 rounded-xl bg-gradient-to-tr from-purple-600 to-pink-500 text-white flex items-center justify-center text-2xl mb-3 mx-auto shadow-md group-hover:rotate-6 transition-transform">
+              👑
+            </div>
+            <h3 class="text-base font-bold text-pink-300">VIP High-Roller</h3>
+            <p class="text-xs text-slate-400 mt-1">Legends Arena</p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800">
+            <div class="text-xs text-slate-400">Base Bet: <strong class="text-slate-200">5,000</strong></div>
+            <div class="text-xs text-amber-400 font-semibold mt-0.5">Min Coins: 25,000</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="text-xs text-slate-500">Dou Dizhu 3D Edition • Powered by Three.js & Web Audio</div>
+    </div>
+  </div>
+
+  <!-- Round Summary Modal -->
+  <div id="game-over-modal" class="hidden absolute inset-0 bg-slate-950/85 backdrop-blur-md z-30 flex items-center justify-center p-4">
+    <div class="max-w-md w-full glass-panel rounded-3xl p-6 border-amber-500/40 text-center relative">
+      <div id="win-icon-wrapper" class="w-16 h-16 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/40 flex items-center justify-center text-3xl mx-auto mb-4">
+        🏆
+      </div>
+      <h2 id="win-title" class="text-2xl font-black text-amber-300 mb-1">Landlord Victory!</h2>
+      <p id="win-description" class="text-slate-300 text-xs mb-5">Player completed all cards first.</p>
+
+      <div class="glass-panel p-4 rounded-2xl bg-slate-900/60 mb-6 text-left space-y-2 text-xs">
+        <div class="flex justify-between text-slate-400">
+          <span>Base Bet:</span>
+          <span id="summary-base-bet" class="font-bold text-slate-200">50</span>
+        </div>
+        <div class="flex justify-between text-slate-400">
+          <span>Multiplier (Bids & Bombs):</span>
+          <span id="summary-multiplier" class="font-bold text-amber-400">x4</span>
+        </div>
+        <div class="h-[1px] bg-slate-800 my-1"></div>
+        <div class="flex justify-between items-center text-sm font-bold">
+          <span class="text-slate-300">Coin Payout:</span>
+          <span id="summary-coin-change" class="text-green-400 text-base font-black">+200</span>
+        </div>
+      </div>
+
+      <div class="flex gap-3">
+        <button id="btn-summary-lobby" class="glass-btn flex-1 py-2.5 rounded-xl text-xs font-bold text-slate-300">
+          Lobby
+        </button>
+        <button id="btn-summary-play-again" class="flex-1 py-2.5 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 shadow-lg hover:brightness-110">
+          Next Round
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Secret Developer/Cheat Menu Modal (Hotkey 'C') -->
+  <div id="cheat-modal" class="hidden absolute inset-0 bg-black/75 backdrop-blur-sm z-40 flex items-center justify-center p-4 pointer-events-auto">
+    <div class="max-w-2xl w-full glass-panel rounded-3xl border-amber-500/60 p-5 sm:p-6 shadow-2xl relative max-h-[90vh] flex flex-col">
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center text-sm border border-amber-500/40">
+            <i class="fa-solid fa-code"></i>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-amber-300 flex items-center gap-2">
+              Developer Debug &amp; Cheat Panel
+              <span class="text-[10px] px-2 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30">DEV ONLY</span>
+            </h3>
+            <p class="text-[11px] text-slate-400">Direct state injection, opponent x-ray, card swapper &amp; deck customization.</p>
+          </div>
+        </div>
+        <button id="btn-close-cheat" class="w-8 h-8 rounded-lg glass-btn flex items-center justify-center text-slate-400 hover:text-white">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Cheat Tabs Navigation -->
+      <div class="flex gap-2 border-b border-slate-800 pt-3 pb-2 text-xs font-bold">
+        <button class="cheat-tab-btn px-3 py-1.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40" data-tab="xray">
+          <i class="fa-solid fa-eye mr-1"></i> 1. X-Ray Vision
+        </button>
+        <button class="cheat-tab-btn px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200" data-tab="swap">
+          <i class="fa-solid fa-arrows-rotate mr-1"></i> 2. Card Swap
+        </button>
+        <button class="cheat-tab-btn px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200" data-tab="custom">
+          <i class="fa-solid fa-wand-magic-sparkles mr-1"></i> 3. Card Customizer
+        </button>
+        <button class="cheat-tab-btn px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200" data-tab="round">
+          <i class="fa-solid fa-forward-fast mr-1"></i> 4. Round Skips
+        </button>
+      </div>
+
+      <!-- Tab Contents Area -->
+      <div class="overflow-y-auto py-3 space-y-4 flex-1 pr-1 text-xs">
+        
+        <!-- TAB 1: X-Ray Vision -->
+        <div id="tab-content-xray" class="cheat-tab-content space-y-3">
+          <div class="flex items-center justify-between bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+            <div>
+              <div class="font-bold text-slate-200">3D Card Face-Up Reveal</div>
+              <div class="text-slate-400 text-[11px]">Turn opponent 3D cards face up on table in real-time.</div>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="toggle-xray-3d" class="sr-only peer">
+              <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+            </label>
+          </div>
+
+          <!-- Opponent Live Hand Inspector -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="glass-panel p-3 rounded-xl bg-slate-900/80 border border-cyan-500/30">
+              <div class="font-bold text-cyan-300 mb-2 flex items-center justify-between">
+                <span>AI Left (Hand List)</span>
+                <span id="xray-left-count" class="text-[10px] text-slate-400">0 cards</span>
+              </div>
+              <div id="xray-ai-left-cards" class="flex flex-wrap gap-1 max-h-36 overflow-y-auto p-1 bg-slate-950/60 rounded-lg">
+                <!-- Injected via JS -->
+              </div>
+            </div>
+
+            <div class="glass-panel p-3 rounded-xl bg-slate-900/80 border border-purple-500/30">
+              <div class="font-bold text-purple-300 mb-2 flex items-center justify-between">
+                <span>AI Right (Hand List)</span>
+                <span id="xray-right-count" class="text-[10px] text-slate-400">0 cards</span>
+              </div>
+              <div id="xray-ai-right-cards" class="flex flex-wrap gap-1 max-h-36 overflow-y-auto p-1 bg-slate-950/60 rounded-lg">
+                <!-- Injected via JS -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 2: Card Swapper -->
+        <div id="tab-content-swap" class="cheat-tab-content hidden space-y-3">
+          <p class="text-slate-400 text-[11px]">Select a card from an opponent's hand and swap it with any card currently in your hand.</p>
+          
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+            <div>
+              <label class="block text-slate-300 font-bold mb-1">Target Opponent Hand:</label>
+              <select id="swap-opponent-target" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-slate-200">
+                <option value="1">AI Left</option>
+                <option value="2">AI Right</option>
+              </select>
+              <label class="block text-slate-300 font-bold mt-2 mb-1">Opponent's Card:</label>
+              <select id="swap-opponent-card" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-slate-200">
+                <!-- Injected via JS -->
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-slate-300 font-bold mb-1">Your Card to Trade Away:</label>
+              <select id="swap-player-card" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-slate-200">
+                <!-- Injected via JS -->
+              </select>
+              <button id="btn-execute-swap" class="w-full mt-6 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black shadow transition-all">
+                <i class="fa-solid fa-arrows-rotate mr-1"></i> Swap Cards Now
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 3: Card Customization -->
+        <div id="tab-content-custom" class="cheat-tab-content hidden space-y-3">
+          <p class="text-slate-400 text-[11px]">Directly transmute any card in your hand into any rank or suit (e.g. create extra Red Jokers, Bombs, or 2s).</p>
+          
+          <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-800 space-y-3">
+            <div>
+              <label class="block text-slate-300 font-bold mb-1">Select Card in Hand:</label>
+              <select id="custom-source-card" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-slate-200">
+                <!-- Injected via JS -->
+              </select>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-slate-300 font-bold mb-1">Transform Into Rank:</label>
+                <select id="custom-target-rank" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-slate-200">
+                  <option value="17">Red Joker (Big Joker)</option>
+                  <option value="16">Black Joker (Small Joker)</option>
+                  <option value="15">2</option>
+                  <option value="14">A</option>
+                  <option value="13">K</option>
+                  <option value="12">Q</option>
+                  <option value="11">J</option>
+                  <option value="10">10</option>
+                  <option value="9">9</option>
+                  <option value="8">8</option>
+                  <option value="7">7</option>
+                  <option value="6">6</option>
+                  <option value="5">5</option>
+                  <option value="4">4</option>
+                  <option value="3">3</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-slate-300 font-bold mb-1">Suit (Ignored for Jokers):</label>
+                <select id="custom-target-suit" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-slate-200">
+                  <option value="spades">♠ Spades (黑桃)</option>
+                  <option value="hearts">♥ Hearts (红桃)</option>
+                  <option value="clubs">♣ Clubs (梅花)</option>
+                  <option value="diamonds">♦ Diamonds (方块)</option>
+                </select>
+              </div>
+            </div>
+
+            <button id="btn-execute-customize" class="w-full py-2 rounded-lg bg-gradient-to-r from-amber-500 to-yellow-400 hover:brightness-110 text-slate-950 font-black shadow transition-all">
+              <i class="fa-solid fa-wand-magic-sparkles mr-1"></i> Transmute Card
+            </button>
+          </div>
+        </div>
+
+        <!-- TAB 4: Round Skips & Economy Hacks -->
+        <div id="tab-content-round" class="cheat-tab-content hidden space-y-3">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
+              <div class="font-bold text-slate-200">Trick Manipulation</div>
+              <p class="text-[11px] text-slate-400">Forces both AI opponents to Pass instantly so you gain control of the table.</p>
+              <button id="btn-force-pass" class="w-full py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold transition-all">
+                Force AI Pass &amp; Take Lead
+              </button>
+            </div>
+
+            <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
+              <div class="font-bold text-slate-200">Instant Victory</div>
+              <p class="text-[11px] text-slate-400">Immediately ends the round granting victory to player's team.</p>
+              <button id="btn-instant-win" class="w-full py-2 rounded-lg bg-green-600 hover:bg-green-500 text-white font-bold transition-all">
+                Instant Win Round
+              </button>
+            </div>
+          </div>
+
+          <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
+            <div>
+              <div class="font-bold text-yellow-300">Bankroll Injector</div>
+              <div class="text-[11px] text-slate-400">Add 10,000 instant casino coins to your balance.</div>
+            </div>
+            <button id="btn-cheat-add-coins" class="px-4 py-2 rounded-lg bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30 border border-yellow-500/40 font-bold">
+              +10,000 Coins
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /**
+     * Synthesized Audio Engine using Web Audio API
+     * Provides rich audio without external audio files
+     */
+    class SoundEngine {
+      constructor() {
+        this.ctx = null;
+        this.enabled = true;
+      }
+
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioContext();
+        }
+        if (this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+
+      playCardDeal() {
+        if (!this.enabled) return;
+        this.init();
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(450, now);
+        osc.frequency.exponentialRampToValueAtTime(150, now + 0.08);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.08);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.08);
+      }
+
+      playCardPlay() {
+        if (!this.enabled) return;
+        this.init();
+        const now = this.ctx.currentTime;
+        // Impact thump
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(220, now);
+        osc.frequency.exponentialRampToValueAtTime(40, now + 0.12);
+        gain.gain.setValueAtTime(0.35, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.12);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.12);
+      }
+
+      playBomb() {
+        if (!this.enabled) return;
+        this.init();
+        const now = this.ctx.currentTime;
+        // White noise explosion
+        const bufferSize = this.ctx.sampleRate * 0.4;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(800, now);
+        filter.frequency.exponentialRampToValueAtTime(60, now + 0.35);
+
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.6, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.4);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx.destination);
+        noise.start(now);
+      }
+
+      playWin() {
+        if (!this.enabled) return;
+        this.init();
+        const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+        notes.forEach((freq, idx) => {
+          const now = this.ctx.currentTime + idx * 0.1;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, now);
+          gain.gain.setValueAtTime(0.25, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.35);
+        });
+      }
+    }
+
+    const audio = new SoundEngine();
+
+    /**
+     * Dou Dizhu Rules & Pattern Analysis Engine
+     */
+    const RANKS = {
+      3: { name: '3', value: 3 },
+      4: { name: '4', value: 4 },
+      5: { name: '5', value: 5 },
+      6: { name: '6', value: 6 },
+      7: { name: '7', value: 7 },
+      8: { name: '8', value: 8 },
+      9: { name: '9', value: 9 },
+      10: { name: '10', value: 10 },
+      11: { name: 'J', value: 11 },
+      12: { name: 'Q', value: 12 },
+      13: { name: 'K', value: 13 },
+      14: { name: 'A', value: 14 },
+      15: { name: '2', value: 15 },
+      16: { name: 'SJ', value: 16, label: 'Small Joker' },
+      17: { name: 'BJ', value: 17, label: 'Big Joker' },
+    };
+
+    const SUITS = ['spades', 'hearts', 'clubs', 'diamonds'];
+
+    const COMBO_TYPES = {
+      PASS: 'PASS',
+      SINGLE: 'SINGLE',
+      PAIR: 'PAIR',
+      TRIO: 'TRIO',
+      TRIO_SOLO: 'TRIO_SOLO',
+      TRIO_PAIR: 'TRIO_PAIR',
+      STRAIGHT: 'STRAIGHT',
+      CONSECUTIVE_PAIRS: 'CONSECUTIVE_PAIRS',
+      AIRPLANE: 'AIRPLANE',
+      AIRPLANE_SOLOS: 'AIRPLANE_SOLOS',
+      AIRPLANE_PAIRS: 'AIRPLANE_PAIRS',
+      FOUR_DUAL_SOLO: 'FOUR_DUAL_SOLO',
+      FOUR_DUAL_PAIR: 'FOUR_DUAL_PAIR',
+      BOMB: 'BOMB',
+      ROCKET: 'ROCKET'
+    };
+
+    class RulesEngine {
+      /**
+       * Counts card rank frequency
+       */
+      static getFrequencyMap(cards) {
+        const counts = {};
+        for (const c of cards) {
+          counts[c.rank] = (counts[c.rank] || 0) + 1;
+        }
+        return counts;
+      }
+
+      /**
+       * Identify combination type, base rank, and length
+       */
+      static parseCombination(cards) {
+        if (!cards || cards.length === 0) return null;
+        const len = cards.length;
+        const counts = this.getFrequencyMap(cards);
+        const uniqueRanks = Object.keys(counts).map(Number).sort((a, b) => a - b);
+
+        // Rocket: Small Joker + Big Joker
+        if (len === 2 && counts[16] === 1 && counts[17] === 1) {
+          return { type: COMBO_TYPES.ROCKET, rank: 17, length: 2, power: 999 };
+        }
+
+        // Bomb: 4 cards of same rank
+        if (len === 4 && uniqueRanks.length === 1 && counts[uniqueRanks[0]] === 4) {
+          return { type: COMBO_TYPES.BOMB, rank: uniqueRanks[0], length: 4, power: 800 + uniqueRanks[0] };
+        }
+
+        // Single
+        if (len === 1) {
+          return { type: COMBO_TYPES.SINGLE, rank: cards[0].rank, length: 1, power: cards[0].rank };
+        }
+
+        // Pair
+        if (len === 2 && uniqueRanks.length === 1) {
+          return { type: COMBO_TYPES.PAIR, rank: uniqueRanks[0], length: 2, power: uniqueRanks[0] };
+        }
+
+        // Trio
+        if (len === 3 && uniqueRanks.length === 1) {
+          return { type: COMBO_TYPES.TRIO, rank: uniqueRanks[0], length: 3, power: uniqueRanks[0] };
+        }
+
+        // Trio with single (3 + 1)
+        if (len === 4) {
+          const trioRank = uniqueRanks.find(r => counts[r] === 3);
+          if (trioRank) {
+            return { type: COMBO_TYPES.TRIO_SOLO, rank: trioRank, length: 4, power: trioRank };
+          }
+        }
+
+        // Trio with pair (3 + 2, full house)
+        if (len === 5) {
+          const trioRank = uniqueRanks.find(r => counts[r] === 3);
+          const pairRank = uniqueRanks.find(r => counts[r] === 2);
+          if (trioRank && pairRank) {
+            return { type: COMBO_TYPES.TRIO_PAIR, rank: trioRank, length: 5, power: trioRank };
+          }
+        }
+
+        // Straight (>= 5 cards, sequential, no 2 or Jokers)
+        if (len >= 5 && uniqueRanks.length === len) {
+          const maxRank = Math.max(...uniqueRanks);
+          const minRank = Math.min(...uniqueRanks);
+          if (maxRank <= 14 && (maxRank - minRank === len - 1)) {
+            return { type: COMBO_TYPES.STRAIGHT, rank: maxRank, length: len, power: maxRank };
+          }
+        }
+
+        // Consecutive Pairs (>= 3 pairs, e.g., 334455, no 2 or Jokers)
+        if (len >= 6 && len % 2 === 0) {
+          const pairCount = len / 2;
+          const allPairs = uniqueRanks.every(r => counts[r] === 2);
+          if (allPairs && uniqueRanks.length === pairCount) {
+            const maxRank = Math.max(...uniqueRanks);
+            const minRank = Math.min(...uniqueRanks);
+            if (maxRank <= 14 && (maxRank - minRank === pairCount - 1)) {
+              return { type: COMBO_TYPES.CONSECUTIVE_PAIRS, rank: maxRank, length: len, power: maxRank };
+            }
+          }
+        }
+
+        // Airplane (Pure trios >= 2, e.g., 333444)
+        const trios = uniqueRanks.filter(r => counts[r] >= 3 && r <= 14).sort((a, b) => a - b);
+        if (trios.length >= 2) {
+          // Check for consecutive trios
+          for (let i = 0; i <= trios.length - 2; i++) {
+            let consecutive = [trios[i]];
+            for (let j = i + 1; j < trios.length; j++) {
+              if (trios[j] === consecutive[consecutive.length - 1] + 1) {
+                consecutive.push(trios[j]);
+              } else {
+                break;
+              }
+            }
+            const k = consecutive.length;
+            if (k >= 2) {
+              // Pure airplane
+              if (len === k * 3) {
+                return { type: COMBO_TYPES.AIRPLANE, rank: consecutive[consecutive.length - 1], length: len, count: k, power: consecutive[consecutive.length - 1] };
+              }
+              // Airplane + Singles (k trios + k singles)
+              if (len === k * 4) {
+                return { type: COMBO_TYPES.AIRPLANE_SOLOS, rank: consecutive[consecutive.length - 1], length: len, count: k, power: consecutive[consecutive.length - 1] };
+              }
+              // Airplane + Pairs (k trios + k pairs)
+              if (len === k * 5) {
+                // Ensure remaining cards are exactly k pairs
+                let remPairs = 0;
+                for (const r of uniqueRanks) {
+                  if (!consecutive.includes(r)) {
+                    if (counts[r] === 2 || counts[r] === 4) remPairs += counts[r] / 2;
+                  }
+                }
+                if (remPairs === k) {
+                  return { type: COMBO_TYPES.AIRPLANE_PAIRS, rank: consecutive[consecutive.length - 1], length: len, count: k, power: consecutive[consecutive.length - 1] };
+                }
+              }
+            }
+          }
+        }
+
+        // Four with two (4 + 2 singles or 4 + 2 pairs)
+        if (len === 6) {
+          const quadRank = uniqueRanks.find(r => counts[r] === 4);
+          if (quadRank) {
+            return { type: COMBO_TYPES.FOUR_DUAL_SOLO, rank: quadRank, length: 6, power: quadRank };
+          }
+        }
+        if (len === 8) {
+          const quadRank = uniqueRanks.find(r => counts[r] === 4);
+          if (quadRank) {
+            // Check if rest are 2 pairs
+            const otherRanks = uniqueRanks.filter(r => r !== quadRank);
+            const arePairs = otherRanks.every(r => counts[r] === 2) || (otherRanks.length === 1 && counts[otherRanks[0]] === 4);
+            if (arePairs) {
+              return { type: COMBO_TYPES.FOUR_DUAL_PAIR, rank: quadRank, length: 8, power: quadRank };
+            }
+          }
+        }
+
+        return null;
+      }
+
+      /**
+       * Compare two combinations: returns true if candidate beats currentTrick
+       */
+      static canBeat(candidateCombo, currentTrickCombo) {
+        if (!candidateCombo) return false;
+        if (!currentTrickCombo) return true; // Leading trick can play anything valid
+
+        // Rocket beats everything
+        if (candidateCombo.type === COMBO_TYPES.ROCKET) return true;
+        if (currentTrickCombo.type === COMBO_TYPES.ROCKET) return false;
+
+        // Bomb beats non-bombs
+        if (candidateCombo.type === COMBO_TYPES.BOMB) {
+          if (currentTrickCombo.type !== COMBO_TYPES.BOMB) return true;
+          return candidateCombo.rank > currentTrickCombo.rank;
+        }
+
+        // Regular combos must match type & length, and rank must be strictly higher
+        if (candidateCombo.type === currentTrickCombo.type && candidateCombo.length === currentTrickCombo.length) {
+          return candidateCombo.rank > currentTrickCombo.rank;
+        }
+
+        return false;
+      }
+    }
+
+    /**
+     * Card Visual Texture Generator
+     * Procedurally renders crisp playing card faces and card backs to HTML Canvases
+     */
+    class CardTextureFactory {
+      static createCardTexture(card) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 384;
+        const ctx = canvas.getContext('2d');
+
+        // Card Face Background
+        ctx.fillStyle = '#ffffff';
+        this.roundRect(ctx, 4, 4, 248, 376, 16);
+        ctx.fill();
+
+        // Subtle inner luxury border
+        ctx.strokeStyle = '#e2e8f0';
+        ctx.lineWidth = 2;
+        this.roundRect(ctx, 12, 12, 232, 360, 12);
+        ctx.stroke();
+
+        const isRed = (card.suit === 'hearts' || card.suit === 'diamonds' || card.rank === 17);
+        const color = isRed ? '#dc2626' : '#1e293b';
+
+        if (card.rank === 16 || card.rank === 17) {
+          // Joker Art
+          ctx.fillStyle = color;
+          ctx.font = 'bold 24px "Inter", sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText('J', 20, 42);
+          ctx.fillText('O', 20, 68);
+          ctx.fillText('K', 20, 94);
+          ctx.fillText('E', 20, 120);
+          ctx.fillText('R', 20, 146);
+
+          // Center Joker Icon
+          ctx.font = '72px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(card.rank === 17 ? '🃏' : '🤡', 128, 210);
+
+          ctx.font = 'bold 16px "Cinzel", sans-serif';
+          ctx.fillText(card.rank === 17 ? 'RED JOKER' : 'BLACK JOKER', 128, 270);
+        } else {
+          const rankLabel = RANKS[card.rank].name;
+          const suitIcon = {
+            spades: '♠',
+            hearts: '♥',
+            clubs: '♣',
+            diamonds: '♦'
+          }[card.suit] || '♠';
+
+          // Top Left Rank & Suit
+          ctx.fillStyle = color;
+          ctx.font = 'bold 36px "Inter", sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(rankLabel, 34, 48);
+
+          ctx.font = '30px sans-serif';
+          ctx.fillText(suitIcon, 34, 82);
+
+          // Center Large Watermark
+          ctx.font = '100px sans-serif';
+          ctx.fillStyle = isRed ? 'rgba(220, 38, 38, 0.9)' : 'rgba(30, 41, 59, 0.9)';
+          ctx.textAlign = 'center';
+          ctx.fillText(suitIcon, 128, 220);
+
+          // Bottom Right Inverted
+          ctx.save();
+          ctx.translate(222, 336);
+          ctx.rotate(Math.PI);
+          ctx.fillStyle = color;
+          ctx.font = 'bold 36px "Inter", sans-serif';
+          ctx.fillText(rankLabel, 0, 0);
+          ctx.font = '30px sans-serif';
+          ctx.fillText(suitIcon, 0, 34);
+          ctx.restore();
+        }
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.anisotropy = 4;
+        return texture;
+      }
+
+      static createBackTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 384;
+        const ctx = canvas.getContext('2d');
+
+        // Card Back Base
+        ctx.fillStyle = '#0f172a';
+        this.roundRect(ctx, 4, 4, 248, 376, 16);
+        ctx.fill();
+
+        // Elegant geometric pattern
+        ctx.fillStyle = '#b91c1c';
+        this.roundRect(ctx, 14, 14, 228, 356, 12);
+        ctx.fill();
+
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 3;
+        this.roundRect(ctx, 20, 20, 216, 344, 8);
+        ctx.stroke();
+
+        // Intricate lattice lines
+        ctx.strokeStyle = 'rgba(245, 158, 11, 0.25)';
+        ctx.lineWidth = 1.5;
+        for (let x = -200; x < 500; x += 22) {
+          ctx.beginPath();
+          ctx.moveTo(x, 20);
+          ctx.lineTo(x + 200, 360);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(x, 360);
+          ctx.lineTo(x + 200, 20);
+          ctx.stroke();
+        }
+
+        // Center medallion
+        ctx.fillStyle = '#450a0a';
+        ctx.beginPath();
+        ctx.arc(128, 192, 45, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.font = 'bold 28px "Cinzel", serif';
+        ctx.fillStyle = '#fbbf24';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('DDZ', 128, 192);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.anisotropy = 4;
+        return texture;
+      }
+
+      static roundRect(ctx, x, y, width, height, radius) {
+        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
+        ctx.lineTo(x + width - radius, y);
+        ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+        ctx.lineTo(x + width, y + height - radius);
+        ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+        ctx.lineTo(x + radius, y + height);
+        ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+        ctx.lineTo(x, y + radius);
+        ctx.quadraticCurveTo(x, y, x + radius, y);
+        ctx.closePath();
+      }
+    }
+
+    /**
+     * Three.js 3D Scene, Table, Cards & Animation Manager
+     */
+    class TableScene3D {
+      constructor(container) {
+        this.container = container;
+        this.cardMeshes = new Map(); // id -> Mesh
+        this.selectedCardIds = new Set();
+        this.xrayActive = false;
+
+        this.initScene();
+        this.initTable();
+        this.initCardSharedMaterials();
+        this.initRaycasting();
+        this.animate = this.animate.bind(this);
+        requestAnimationFrame(this.animate);
+      }
+
+      initScene() {
+        this.scene = new THREE.Scene();
+        this.scene.background = new THREE.Color(0x090d16);
+
+        this.camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        this.camera.position.set(0, 20, 21);
+        this.camera.lookAt(0, -1, 0.5);
+
+        this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        this.container.appendChild(this.renderer.domElement);
+
+        // Lights
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
+        this.scene.add(ambientLight);
+
+        const tableSpot = new THREE.SpotLight(0xfffaed, 1.8, 45, Math.PI / 3.5, 0.35, 1);
+        tableSpot.position.set(0, 26, 6);
+        tableSpot.castShadow = true;
+        tableSpot.shadow.mapSize.width = 1024;
+        tableSpot.shadow.mapSize.height = 1024;
+        tableSpot.shadow.bias = -0.0008;
+        this.scene.add(tableSpot);
+
+        const fillLight = new THREE.DirectionalLight(0x38bdf8, 0.35);
+        fillLight.position.set(-15, 10, -10);
+        this.scene.add(fillLight);
+
+        window.addEventListener('resize', () => this.onWindowResize());
+      }
+
+      initTable() {
+        // Table Base / Felt
+        const tableGeo = new THREE.CylinderGeometry(15, 15, 0.8, 64);
+        const feltMat = new THREE.MeshStandardMaterial({
+          color: 0x0f4229, // Luxury British Racing Green Felt
+          roughness: 0.75,
+          metalness: 0.05
+        });
+        const tableMesh = new THREE.Mesh(tableGeo, feltMat);
+        tableMesh.position.y = -0.4;
+        tableMesh.receiveShadow = true;
+        this.scene.add(tableMesh);
+
+        // Mahogany Table Rim
+        const rimGeo = new THREE.TorusGeometry(15, 0.65, 16, 64);
+        const rimMat = new THREE.MeshStandardMaterial({
+          color: 0x3e1709,
+          roughness: 0.3,
+          metalness: 0.15
+        });
+        const rimMesh = new THREE.Mesh(rimGeo, rimMat);
+        rimMesh.rotation.x = Math.PI / 2;
+        rimMesh.position.y = -0.05;
+        this.scene.add(rimMesh);
+
+        // Subtle decorative gold inlays on felt
+        const ringGeo = new THREE.RingGeometry(8.5, 8.58, 64);
+        const ringMat = new THREE.MeshBasicMaterial({ color: 0xca8a04, side: THREE.DoubleSide, transparent: true, opacity: 0.4 });
+        const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+        ringMesh.rotation.x = -Math.PI / 2;
+        ringMesh.position.y = 0.01;
+        this.scene.add(ringMesh);
+      }
+
+      initCardSharedMaterials() {
+        this.backTexture = CardTextureFactory.createBackTexture();
+        this.backMaterial = new THREE.MeshStandardMaterial({
+          map: this.backTexture,
+          roughness: 0.45,
+          metalness: 0.05
+        });
+
+        this.cardEdgeMaterial = new THREE.MeshStandardMaterial({
+          color: 0xf8fafc,
+          roughness: 0.9
+        });
+
+        this.cardGeometry = new THREE.BoxGeometry(1.65, 2.45, 0.025);
+      }
+
+      createCardMesh(card) {
+        const frontTexture = CardTextureFactory.createCardTexture(card);
+        const frontMaterial = new THREE.MeshStandardMaterial({
+          map: frontTexture,
+          roughness: 0.45,
+          metalness: 0.05
+        });
+
+        // Order of faces for Three.js BoxGeometry: +X, -X, +Y, -Y, +Z (Front), -Z (Back)
+        const materials = [
+          this.cardEdgeMaterial,
+          this.cardEdgeMaterial,
+          this.cardEdgeMaterial,
+          this.cardEdgeMaterial,
+          frontMaterial,
+          this.backMaterial
+        ];
+
+        const mesh = new THREE.Mesh(this.cardGeometry, materials);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.userData = {
+          card: card,
+          frontMaterial: frontMaterial,
+          targetPos: new THREE.Vector3(),
+          targetRot: new THREE.Euler(),
+          selected: false,
+          owner: null
+        };
+
+        this.scene.add(mesh);
+        this.cardMeshes.set(card.id, mesh);
+        return mesh;
+      }
+
+      updateCardFace(card) {
+        const mesh = this.cardMeshes.get(card.id);
+        if (!mesh) return;
+        const newFrontTexture = CardTextureFactory.createCardTexture(card);
+        mesh.userData.card = card;
+        mesh.material[4].map.dispose();
+        mesh.material[4].map = newFrontTexture;
+        mesh.material[4].needsUpdate = true;
+      }
+
+      removeCardMesh(cardId) {
+        let mesh = this.cardMeshes.get(cardId);
+        // Fallback search in scene to catch any unindexed card mesh
+        if (!mesh) {
+          this.scene.traverse((obj) => {
+            if (obj.isMesh && obj.userData && obj.userData.card && obj.userData.card.id === cardId) {
+              mesh = obj;
+            }
+          });
+        }
+        if (mesh) {
+          this.scene.remove(mesh);
+          if (mesh.material && Array.isArray(mesh.material)) {
+            if (mesh.material[4] && mesh.material[4].map) {
+              mesh.material[4].map.dispose();
+              mesh.material[4].dispose();
+            }
+          }
+          this.cardMeshes.delete(cardId);
+        }
+      }
+
+      removePlayedCards(cards) {
+        if (!cards || !Array.isArray(cards)) return;
+        cards.forEach(card => {
+          if (card && card.id) {
+            this.removeCardMesh(card.id);
+          }
+        });
+      }
+
+      clearAllPlayedCards() {
+        const toRemove = [];
+        for (const [id, mesh] of this.cardMeshes) {
+          if (mesh.userData && mesh.userData.owner === 'table_played') {
+            toRemove.push(id);
+          }
+        }
+        // Also sweep scene for any orphaned played meshes
+        this.scene.traverse((obj) => {
+          if (obj.isMesh && obj.userData && obj.userData.owner === 'table_played') {
+            if (obj.userData.card && !toRemove.includes(obj.userData.card.id)) {
+              toRemove.push(obj.userData.card.id);
+            }
+          }
+        });
+        toRemove.forEach(id => this.removeCardMesh(id));
+      }
+
+      clearAllCards() {
+        const toRemove = [];
+        for (const [id, mesh] of this.cardMeshes) {
+          toRemove.push(mesh);
+        }
+        // Sweep scene for all card meshes to ensure no lingering cards survive into the next round
+        this.scene.traverse((obj) => {
+          if (obj.isMesh && obj.userData && obj.userData.card) {
+            if (!toRemove.includes(obj)) {
+              toRemove.push(obj);
+            }
+          }
+        });
+
+        toRemove.forEach(mesh => {
+          this.scene.remove(mesh);
+          if (mesh.material && Array.isArray(mesh.material)) {
+            if (mesh.material[4] && mesh.material[4].map) {
+              mesh.material[4].map.dispose();
+              mesh.material[4].dispose();
+            }
+          }
+        });
+        this.cardMeshes.clear();
+        this.selectedCardIds.clear();
+      }
+
+      layoutHands(playerHand, aiLeftHand, aiRightHand, holeCards, diPaiRevealed) {
+        // 1. Layout Human Hand (Bottom Arc)
+        const pLen = playerHand.length;
+        const pSpacing = Math.min(1.05, 15 / (pLen || 1));
+        const pStartX = -((pLen - 1) * pSpacing) / 2;
+
+        playerHand.forEach((card, index) => {
+          let mesh = this.cardMeshes.get(card.id);
+          if (!mesh) mesh = this.createCardMesh(card);
+
+          mesh.userData.owner = 'player';
+          const isSelected = this.selectedCardIds.has(card.id);
+          const x = pStartX + index * pSpacing;
+          const y = 0.5 + (isSelected ? 0.7 : 0) + (index * 0.01);
+          const z = 8.8 - Math.abs(x) * 0.08 - (isSelected ? 0.35 : 0);
+
+          mesh.userData.targetPos.set(x, y, z);
+          // Facing camera with slight tilt
+          mesh.userData.targetRot.set(-Math.PI / 4.2, 0, -x * 0.03);
+        });
+
+        // 2. Layout AI Left (Left Edge)
+        const lLen = aiLeftHand.length;
+        const lSpacing = Math.min(0.65, 10 / (lLen || 1));
+        const lStartZ = -((lLen - 1) * lSpacing) / 2;
+
+        aiLeftHand.forEach((card, index) => {
+          let mesh = this.cardMeshes.get(card.id);
+          if (!mesh) mesh = this.createCardMesh(card);
+
+          mesh.userData.owner = 'ai_left';
+          const x = -11.2;
+          const y = 0.5 + (index * 0.015);
+          const z = lStartZ + index * lSpacing;
+
+          mesh.userData.targetPos.set(x, y, z);
+          // If X-ray active, face up towards camera; otherwise face down / inwards
+          if (this.xrayActive) {
+            mesh.userData.targetRot.set(-Math.PI / 4, Math.PI / 2.8, 0);
+          } else {
+            mesh.userData.targetRot.set(-Math.PI / 2, 0, -Math.PI / 2);
+          }
+        });
+
+        // 3. Layout AI Right (Right Edge)
+        const rLen = aiRightHand.length;
+        const rSpacing = Math.min(0.65, 10 / (rLen || 1));
+        const rStartZ = -((rLen - 1) * rSpacing) / 2;
+
+        aiRightHand.forEach((card, index) => {
+          let mesh = this.cardMeshes.get(card.id);
+          if (!mesh) mesh = this.createCardMesh(card);
+
+          mesh.userData.owner = 'ai_right';
+          const x = 11.2;
+          const y = 0.5 + (index * 0.015);
+          const z = rStartZ + index * rSpacing;
+
+          mesh.userData.targetPos.set(x, y, z);
+          if (this.xrayActive) {
+            mesh.userData.targetRot.set(-Math.PI / 4, -Math.PI / 2.8, 0);
+          } else {
+            mesh.userData.targetRot.set(-Math.PI / 2, 0, Math.PI / 2);
+          }
+        });
+
+        // 4. Layout 3 Di Pai (Hole Cards) at Table Top
+        if (holeCards) {
+          const hSpacing = 2.0;
+          holeCards.forEach((card, index) => {
+            let mesh = this.cardMeshes.get(card.id);
+            if (!mesh) mesh = this.createCardMesh(card);
+
+            mesh.userData.owner = 'di_pai';
+            const x = (index - 1) * hSpacing;
+            const y = 0.25;
+            const z = -6.2;
+
+            mesh.userData.targetPos.set(x, y, z);
+            if (diPaiRevealed) {
+              mesh.userData.targetRot.set(-Math.PI / 3.5, 0, 0);
+            } else {
+              mesh.userData.targetRot.set(-Math.PI / 2, 0, Math.PI);
+            }
+          });
+        }
+      }
+
+      layoutPlayedCards(lastPlays) {
+        // Collect current active played card IDs to purge any prior stale cards
+        const currentPlayedIds = new Set();
+        for (const cards of Object.values(lastPlays)) {
+          if (Array.isArray(cards)) {
+            cards.forEach(c => currentPlayedIds.add(c.id));
+          }
+        }
+
+        // Remove any mesh flagged as table_played that is no longer in current trick plays
+        const stalePlayedIds = [];
+        for (const [id, mesh] of this.cardMeshes) {
+          if (mesh.userData && mesh.userData.owner === 'table_played' && !currentPlayedIds.has(id)) {
+            stalePlayedIds.push(id);
+          }
+        }
+        stalePlayedIds.forEach(id => this.removeCardMesh(id));
+
+        const positions = {
+          player: { x: 0, z: 2.8, rotY: 0 },
+          ai_left: { x: -4.5, z: -0.5, rotY: Math.PI / 6 },
+          ai_right: { x: 4.5, z: -0.5, rotY: -Math.PI / 6 }
+        };
+
+        for (const [seat, cards] of Object.entries(lastPlays)) {
+          if (!cards || cards.length === 0) continue;
+          const pos = positions[seat];
+          const len = cards.length;
+          const spacing = Math.min(0.85, 6 / (len || 1));
+          const startX = pos.x - ((len - 1) * spacing) / 2;
+
+          cards.forEach((card, idx) => {
+            let mesh = this.cardMeshes.get(card.id);
+            if (!mesh) mesh = this.createCardMesh(card);
+
+            mesh.userData.owner = 'table_played';
+            const x = startX + idx * spacing;
+            const y = 0.15 + (idx * 0.015);
+            const z = pos.z;
+
+            mesh.userData.targetPos.set(x, y, z);
+            mesh.userData.targetRot.set(-Math.PI / 2, 0, pos.rotY);
+          });
+        }
+      }
+
+      initRaycasting() {
+        this.raycaster = new THREE.Raycaster();
+        this.mouse = new THREE.Vector2();
+
+        window.addEventListener('pointerdown', (e) => {
+          // Check if clicking inside HUD UI buttons
+          if (e.target.closest('#hud button') || e.target.closest('#cheat-modal') || e.target.closest('#lobby-screen') || e.target.closest('#game-over-modal')) {
+            return;
+          }
+
+          this.mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+          this.mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+          this.raycaster.setFromCamera(this.mouse, this.camera);
+          const playerMeshes = Array.from(this.cardMeshes.values()).filter(m => m.userData.owner === 'player');
+          const intersects = this.raycaster.intersectObjects(playerMeshes);
+
+          if (intersects.length > 0) {
+            const hitMesh = intersects[0].object;
+            const cardId = hitMesh.userData.card.id;
+            if (this.selectedCardIds.has(cardId)) {
+              this.selectedCardIds.delete(cardId);
+            } else {
+              this.selectedCardIds.add(cardId);
+            }
+            audio.playCardDeal();
+            if (window.game) window.game.syncSelectedCardsUI();
+          }
+        });
+      }
+
+      onWindowResize() {
+        this.camera.aspect = window.innerWidth / window.innerHeight;
+        this.camera.updateProjectionMatrix();
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+
+      animate() {
+        requestAnimationFrame(this.animate);
+
+        // Smooth card interpolation (LERP)
+        const lerpFactor = 0.14;
+        for (const [id, mesh] of this.cardMeshes) {
+          mesh.position.lerp(mesh.userData.targetPos, lerpFactor);
+          
+          mesh.rotation.x += (mesh.userData.targetRot.x - mesh.rotation.x) * lerpFactor;
+          mesh.rotation.y += (mesh.userData.targetRot.y - mesh.rotation.y) * lerpFactor;
+          mesh.rotation.z += (mesh.userData.targetRot.z - mesh.rotation.z) * lerpFactor;
+        }
+
+        this.renderer.render(this.scene, this.camera);
+      }
+    }
+
+    /**
+     * Dou Dizhu Heuristic AI Logic
+     */
+    class DouDizhuAI {
+      /**
+       * AI Bidding Decision: counts high cards (2s, Jokers) and Bombs
+       */
+      static decideBid(hand, currentHighestBid) {
+        let score = 0;
+        const counts = RulesEngine.getFrequencyMap(hand);
+
+        // Jokers
+        if (counts[17]) score += 4; // Big Joker
+        if (counts[16]) score += 3; // Small Joker
+        // 2s
+        if (counts[15]) score += counts[15] * 2;
+        // Bombs
+        for (const r in counts) {
+          if (counts[r] === 4) score += 4;
+        }
+        // Aces
+        if (counts[14]) score += counts[14] * 0.7;
+
+        if (score >= 9) return 3;
+        if (score >= 6 && currentHighestBid < 2) return 2;
+        if (score >= 4 && currentHighestBid < 1) return 1;
+        return 0; // Pass
+      }
+
+      /**
+       * Selects best cards to play when it's AI's turn
+       */
+      static selectMove(hand, currentTrick, seatRole, landlordSeat, currentSeat, partnerSeat) {
+        const counts = RulesEngine.getFrequencyMap(hand);
+        const sortedHand = [...hand].sort((a, b) => a.rank - b.rank);
+
+        // Case 1: AI is Leading a new trick!
+        if (!currentTrick || !currentTrick.combo) {
+          return this.findBestLead(sortedHand, counts);
+        }
+
+        const trickCombo = currentTrick.combo;
+
+        // Peasant Teamwork Check: If partner currently holds the trick with a high card or few cards, pass!
+        if (seatRole === 'peasant' && currentTrick.seat === partnerSeat) {
+          if (trickCombo.rank >= 13 || trickCombo.type === COMBO_TYPES.BOMB || trickCombo.type === COMBO_TYPES.ROCKET) {
+            return null; // Let partner take trick
+          }
+        }
+
+        // Case 2: AI is Following an existing trick
+        // Try to beat with same combo type
+        const regularMove = this.findLowestBeatingRegular(sortedHand, trickCombo);
+        if (regularMove) return regularMove;
+
+        // Try to beat with Bomb or Rocket if crucial
+        if (trickCombo.type !== COMBO_TYPES.ROCKET) {
+          const bombMove = this.findLowestBomb(sortedHand, trickCombo);
+          if (bombMove) {
+            // Only bomb if opponent is threatening to win or trick is very high
+            const shouldBomb = (trickCombo.seat === landlordSeat) || (hand.length <= 4);
+            if (shouldBomb) return bombMove;
+          }
+        }
+
+        return null; // Pass
+      }
+
+      static findBestLead(hand, counts) {
+        // Try to lead lowest single or pair to clear hand
+        const singles = hand.filter(c => counts[c.rank] === 1);
+        if (singles.length > 0 && singles[0].rank <= 10) {
+          return [singles[0]];
+        }
+
+        const pairs = hand.filter(c => counts[c.rank] === 2);
+        if (pairs.length > 0 && pairs[0].rank <= 10) {
+          return pairs.slice(0, 2);
+        }
+
+        const trios = hand.filter(c => counts[c.rank] === 3);
+        if (trios.length > 0) {
+          const trioRank = trios[0].rank;
+          const trioCards = hand.filter(c => c.rank === trioRank);
+          // Try adding single kicker
+          const kicker = hand.find(c => counts[c.rank] === 1 && c.rank <= 10);
+          if (kicker) return [...trioCards, kicker];
+          return trioCards;
+        }
+
+        // Default: play lowest card
+        return [hand[0]];
+      }
+
+      static findLowestBeatingRegular(hand, targetCombo) {
+        const counts = RulesEngine.getFrequencyMap(hand);
+
+        if (targetCombo.type === COMBO_TYPES.SINGLE) {
+          const candidate = hand.find(c => c.rank > targetCombo.rank);
+          return candidate ? [candidate] : null;
+        }
+
+        if (targetCombo.type === COMBO_TYPES.PAIR) {
+          for (const rankStr in counts) {
+            const r = Number(rankStr);
+            if (counts[r] >= 2 && r > targetCombo.rank) {
+              return hand.filter(c => c.rank === r).slice(0, 2);
+            }
+          }
+        }
+
+        if (targetCombo.type === COMBO_TYPES.TRIO) {
+          for (const rankStr in counts) {
+            const r = Number(rankStr);
+            if (counts[r] >= 3 && r > targetCombo.rank) {
+              return hand.filter(c => c.rank === r).slice(0, 3);
+            }
+          }
+        }
+
+        if (targetCombo.type === COMBO_TYPES.TRIO_SOLO) {
+          for (const rankStr in counts) {
+            const r = Number(rankStr);
+            if (counts[r] >= 3 && r > targetCombo.rank) {
+              const trio = hand.filter(c => c.rank === r).slice(0, 3);
+              const kicker = hand.find(c => c.rank !== r);
+              if (kicker) return [...trio, kicker];
+            }
+          }
+        }
+
+        return null;
+      }
+
+      static findLowestBomb(hand, targetCombo) {
+        const counts = RulesEngine.getFrequencyMap(hand);
+        // Standard bomb
+        for (const rankStr in counts) {
+          const r = Number(rankStr);
+          if (counts[r] === 4) {
+            if (targetCombo.type !== COMBO_TYPES.BOMB || r > targetCombo.rank) {
+              return hand.filter(c => c.rank === r);
+            }
+          }
+        }
+        // Rocket
+        if (counts[16] === 1 && counts[17] === 1) {
+          return hand.filter(c => c.rank === 16 || c.rank === 17);
+        }
+        return null;
+      }
+    }
+
+    /**
+     * Master Game Orchestrator & Economy Controller
+     */
+    const ROOM_TIERS = {
+      bronze: { name: 'Bronze Room', baseBet: 50, minCoins: 200 },
+      silver: { name: 'Silver Room', baseBet: 200, minCoins: 1000 },
+      gold: { name: 'Gold Room', baseBet: 1000, minCoins: 5000 },
+      vip: { name: 'VIP High-Roller', baseBet: 5000, minCoins: 25000 }
+    };
+
+    class DouDizhuGame {
+      constructor() {
+        this.table3D = new TableScene3D(document.getElementById('canvas-container'));
+        this.coins = parseInt(localStorage.getItem('ddz_coins') || '5000', 10);
+        this.currentRoomKey = 'bronze';
+        this.currentRoom = ROOM_TIERS.bronze;
+        
+        this.deck = [];
+        this.hands = {
+          0: [], // Player (Human)
+          1: [], // AI Left
+          2: []  // AI Right
+        };
+        this.diPai = [];
+        this.roles = { 0: 'peasant', 1: 'peasant', 2: 'peasant' };
+        this.landlordSeat = null;
+
+        this.gameState = 'LOBBY'; // LOBBY, BIDDING, PLAYING, GAME_OVER
+        this.currentTurn = 0;
+        this.highestBid = 0;
+        this.highestBidder = null;
+        this.biddingTurnsCount = 0;
+
+        this.currentTrick = null; // { seat: 0, combo: parsedCombo, cards: [] }
+        this.lastPlays = { player: [], ai_left: [], ai_right: [] };
+        this.consecutivePasses = 0;
+        this.multiplier = 1;
+
+        this.initDOM();
+        this.updateCoinDisplays();
+      }
+
+      initDOM() {
+        // Lobby Room Cards
+        document.querySelectorAll('.room-card').forEach(card => {
+          card.addEventListener('click', () => {
+            const roomKey = card.getAttribute('data-room');
+            this.enterRoom(roomKey);
+          });
+        });
+
+        document.getElementById('btn-claim-bonus').addEventListener('click', () => {
+          this.addCoins(1000);
+          this.showToast('Claimed +1,000 Free Daily Bonus Coins!');
+        });
+
+        document.getElementById('btn-return-lobby').addEventListener('click', () => {
+          this.returnToLobby();
+        });
+
+        // Bidding Buttons
+        [0, 1, 2, 3].forEach(bid => {
+          document.getElementById(`bid-btn-${bid}`).addEventListener('click', () => {
+            this.handlePlayerBid(bid);
+          });
+        });
+
+        // Play Action Buttons
+        document.getElementById('btn-play').addEventListener('click', () => this.handlePlayerPlay());
+        document.getElementById('btn-pass').addEventListener('click', () => this.handlePlayerPass());
+        document.getElementById('btn-hint').addEventListener('click', () => this.handlePlayerHint());
+
+        // Audio & Cheat Toggles
+        document.getElementById('btn-sound-toggle').addEventListener('click', () => {
+          audio.enabled = !audio.enabled;
+          document.getElementById('sound-icon').className = audio.enabled ? 'fa-solid fa-volume-high' : 'fa-solid fa-volume-xmark text-red-400';
+        });
+
+        // Game Over Buttons
+        document.getElementById('btn-summary-play-again').addEventListener('click', () => {
+          document.getElementById('game-over-modal').classList.add('hidden');
+          this.startRound();
+        });
+        document.getElementById('btn-summary-lobby').addEventListener('click', () => {
+          document.getElementById('game-over-modal').classList.add('hidden');
+          this.returnToLobby();
+        });
+
+        this.initCheatMenu();
+      }
+
+      addCoins(amount) {
+        this.coins = Math.max(0, this.coins + amount);
+        localStorage.setItem('ddz_coins', this.coins.toString());
+        this.updateCoinDisplays();
+      }
+
+      updateCoinDisplays() {
+        document.getElementById('user-coins').innerText = this.coins.toLocaleString();
+        document.getElementById('lobby-user-coins').innerText = this.coins.toLocaleString();
+      }
+
+      enterRoom(roomKey) {
+        const tier = ROOM_TIERS[roomKey];
+        if (this.coins < tier.minCoins) {
+          this.showToast(`Insufficient Coins! Need at least ${tier.minCoins.toLocaleString()} coins.`);
+          return;
+        }
+
+        this.currentRoomKey = roomKey;
+        this.currentRoom = tier;
+        document.getElementById('current-room-name').innerText = tier.name;
+        document.getElementById('room-base-bet').innerText = tier.baseBet.toLocaleString();
+        document.getElementById('lobby-screen').classList.add('hidden');
+
+        this.startRound();
+      }
+
+      returnToLobby() {
+        this.gameState = 'LOBBY';
+        document.getElementById('lobby-screen').classList.remove('hidden');
+        document.getElementById('bidding-bar').classList.add('hidden');
+        document.getElementById('action-bar').classList.add('hidden');
+        this.table3D.clearAllCards();
+        this.lastPlays = { player: [], ai_left: [], ai_right: [] };
+        this.currentTrick = null;
+        this.consecutivePasses = 0;
+      }
+
+      startRound() {
+        if (this.coins < this.currentRoom.baseBet) {
+          this.showToast('Not enough coins to cover the base bet! Returning to Lobby.');
+          this.returnToLobby();
+          return;
+        }
+
+        this.gameState = 'BIDDING';
+        this.multiplier = 1;
+        this.highestBid = 0;
+        this.highestBidder = null;
+        this.biddingTurnsCount = 0;
+        this.consecutivePasses = 0;
+        this.currentTrick = null;
+        this.lastPlays = { player: [], ai_left: [], ai_right: [] };
+        this.table3D.clearAllCards();
+
+        // Update Multiplier UI
+        document.getElementById('multiplier-badge').innerText = `x${this.multiplier}`;
+        document.getElementById('player-role-badge').innerText = 'Peasant';
+        document.getElementById('player-role-badge').className = 'px-2 py-0.5 text-xs font-bold rounded-md bg-slate-700 text-slate-300';
+        document.getElementById('ai-left-role').innerText = 'Peasant';
+        document.getElementById('ai-right-role').innerText = 'Peasant';
+
+        // Reset Di Pai visual previews
+        const diPaiContainer = document.getElementById('di-pai-cards-preview');
+        diPaiContainer.innerHTML = `
+          <div class="w-7 h-10 rounded bg-amber-950/40 border border-amber-500/40 flex items-center justify-center text-xs font-bold text-amber-500">?</div>
+          <div class="w-7 h-10 rounded bg-amber-950/40 border border-amber-500/40 flex items-center justify-center text-xs font-bold text-amber-500">?</div>
+          <div class="w-7 h-10 rounded bg-amber-950/40 border border-amber-500/40 flex items-center justify-center text-xs font-bold text-amber-500">?</div>
+        `;
+
+        this.generateStandardDeck();
+        this.shuffleDeck();
+
+        // Deal 17 cards to each player, 3 cards to Di Pai
+        this.hands[0] = this.deck.slice(0, 17);
+        this.hands[1] = this.deck.slice(17, 34);
+        this.hands[2] = this.deck.slice(34, 51);
+        this.diPai = this.deck.slice(51, 54);
+
+        this.sortHand(this.hands[0]);
+        this.sortHand(this.hands[1]);
+        this.sortHand(this.hands[2]);
+
+        audio.playCardDeal();
+        this.update3DScene(false);
+        this.updateCardCounts();
+
+        this.showToast('Cards Dealt! Bidding Phase begins...');
+
+        // Start Bidding with random player or human
+        this.currentTurn = Math.floor(Math.random() * 3);
+        this.nextBiddingTurn();
+      }
+
+      generateStandardDeck() {
+        this.deck = [];
+        let idCounter = 1;
+        // Standard 52 cards (ranks 3 to 15)
+        for (let r = 3; r <= 15; r++) {
+          for (const s of SUITS) {
+            this.deck.push({ id: `c_${idCounter++}`, rank: r, suit: s });
+          }
+        }
+        // Small Joker (16) & Big Joker (17)
+        this.deck.push({ id: `c_${idCounter++}`, rank: 16, suit: 'joker' });
+        this.deck.push({ id: `c_${idCounter++}`, rank: 17, suit: 'joker' });
+      }
+
+      shuffleDeck() {
+        for (let i = this.deck.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [this.deck[i], this.deck[j]] = [this.deck[j], this.deck[i]];
+        }
+      }
+
+      sortHand(hand) {
+        hand.sort((a, b) => b.rank - a.rank);
+      }
+
+      updateCardCounts() {
+        document.getElementById('ai-left-count').innerText = this.hands[1].length;
+        document.getElementById('ai-right-count').innerText = this.hands[2].length;
+      }
+
+      nextBiddingTurn() {
+        if (this.biddingTurnsCount >= 3 || this.highestBid === 3) {
+          this.finalizeLandlord();
+          return;
+        }
+
+        if (this.currentTurn === 0) {
+          // Human Turn to Bid
+          this.showBiddingControls();
+        } else {
+          // AI Turn to Bid
+          document.getElementById('bidding-bar').classList.add('hidden');
+          this.showAIBubble(this.currentTurn, 'Evaluating hand...');
+          setTimeout(() => {
+            const aiBid = DouDizhuAI.decideBid(this.hands[this.currentTurn], this.highestBid);
+            this.processBid(this.currentTurn, aiBid);
+          }, 1200);
+        }
+      }
+
+      showBiddingControls() {
+        const bar = document.getElementById('bidding-bar');
+        bar.classList.remove('hidden');
+
+        // Disable options lower than or equal to current highest bid
+        document.getElementById('bid-btn-1').disabled = (this.highestBid >= 1);
+        document.getElementById('bid-btn-2').disabled = (this.highestBid >= 2);
+        document.getElementById('bid-btn-3').disabled = (this.highestBid >= 3);
+      }
+
+      handlePlayerBid(score) {
+        document.getElementById('bidding-bar').classList.add('hidden');
+        this.processBid(0, score);
+      }
+
+      processBid(seat, score) {
+        this.biddingTurnsCount++;
+        const seatName = seat === 0 ? 'You' : (seat === 1 ? 'AI Left' : 'AI Right');
+
+        if (score > this.highestBid) {
+          this.highestBid = score;
+          this.highestBidder = seat;
+          this.multiplier = Math.max(1, score);
+          document.getElementById('multiplier-badge').innerText = `x${this.multiplier}`;
+          this.showToast(`${seatName} bid ${score} point(s)!`);
+          this.showAIBubble(seat, `Bid ${score}!`);
+        } else {
+          this.showToast(`${seatName} passed on bidding.`);
+          this.showAIBubble(seat, 'Pass');
+        }
+
+        if (this.highestBid === 3 || this.biddingTurnsCount >= 3) {
+          setTimeout(() => this.finalizeLandlord(), 1000);
+        } else {
+          this.currentTurn = (this.currentTurn + 1) % 3;
+          setTimeout(() => this.nextBiddingTurn(), 1100);
+        }
+      }
+
+      finalizeLandlord() {
+        if (!this.highestBidder && this.highestBid === 0) {
+          // Everyone passed: redeal
+          this.showToast('All players passed! Redealing cards...');
+          setTimeout(() => this.startRound(), 1500);
+          return;
+        }
+
+        this.landlordSeat = this.highestBidder;
+        this.roles = { 0: 'peasant', 1: 'peasant', 2: 'peasant' };
+        this.roles[this.landlordSeat] = 'landlord';
+
+        // Update Role Badges
+        const landlordName = this.landlordSeat === 0 ? 'You' : (this.landlordSeat === 1 ? 'AI Left' : 'AI Right');
+        this.showToast(`${landlordName} became the Landlord (地主)!`);
+
+        if (this.landlordSeat === 0) {
+          document.getElementById('player-role-badge').innerText = 'Landlord';
+          document.getElementById('player-role-badge').className = 'px-2 py-0.5 text-xs font-bold rounded-md bg-amber-500 text-slate-950 font-black';
+        } else if (this.landlordSeat === 1) {
+          document.getElementById('ai-left-role').innerText = 'Landlord';
+          document.getElementById('ai-left-role').className = 'px-1.5 py-0.2 text-[10px] rounded bg-amber-500 text-slate-950 font-black';
+        } else {
+          document.getElementById('ai-right-role').innerText = 'Landlord';
+          document.getElementById('ai-right-role').className = 'px-1.5 py-0.2 text-[10px] rounded bg-amber-500 text-slate-950 font-black';
+        }
+
+        // Reveal Di Pai in UI preview
+        const diPaiContainer = document.getElementById('di-pai-cards-preview');
+        diPaiContainer.innerHTML = '';
+        this.diPai.forEach(card => {
+          const isRed = (card.suit === 'hearts' || card.suit === 'diamonds' || card.rank === 17);
+          const suitIcon = { spades: '♠', hearts: '♥', clubs: '♣', diamonds: '♦' }[card.suit] || '★';
+          const rankName = RANKS[card.rank].name;
+          const el = document.createElement('div');
+          el.className = `w-7 h-10 rounded bg-white border border-slate-300 flex flex-col items-center justify-center font-bold text-xs ${isRed ? 'text-red-600' : 'text-slate-900'} shadow`;
+          el.innerHTML = `<span>${rankName}</span><span class="text-[10px] leading-none">${suitIcon}</span>`;
+          diPaiContainer.appendChild(el);
+        });
+
+        // Add 3 Di Pai cards into Landlord's hand
+        this.hands[this.landlordSeat].push(...this.diPai);
+        this.sortHand(this.hands[this.landlordSeat]);
+
+        this.update3DScene(true);
+        this.updateCardCounts();
+
+        // Start Trick Playing phase (Landlord goes first)
+        this.gameState = 'PLAYING';
+        this.currentTurn = this.landlordSeat;
+        setTimeout(() => this.nextPlayTurn(), 1400);
+      }
+
+      nextPlayTurn() {
+        if (this.gameState !== 'PLAYING') return;
+
+        // Fallback safety check: if two consecutive players passed, clear trick
+        if (this.consecutivePasses >= 2) {
+          this.table3D.clearAllPlayedCards();
+          this.lastPlays = { player: [], ai_left: [], ai_right: [] };
+          this.currentTrick = null;
+          this.consecutivePasses = 0;
+          this.update3DScene(true);
+          this.showToast('New Trick! Table cleared.');
+        }
+
+        if (this.currentTurn === 0) {
+          // Human's Turn
+          this.showActionControls();
+        } else {
+          // AI's Turn
+          document.getElementById('action-bar').classList.add('hidden');
+          this.showAIBubble(this.currentTurn, 'Thinking...');
+
+          setTimeout(() => {
+            const partnerSeat = this.roles[this.currentTurn] === 'peasant' 
+              ? (this.roles[1] === 'peasant' && this.currentTurn !== 1 ? 1 : (this.roles[2] === 'peasant' && this.currentTurn !== 2 ? 2 : 0)) 
+              : null;
+
+            const aiCards = DouDizhuAI.selectMove(
+              this.hands[this.currentTurn],
+              this.currentTrick,
+              this.roles[this.currentTurn],
+              this.landlordSeat,
+              this.currentTurn,
+              partnerSeat
+            );
+
+            if (aiCards && aiCards.length > 0) {
+              this.executePlayCards(this.currentTurn, aiCards);
+            } else {
+              this.executePass(this.currentTurn);
+            }
+          }, 1100);
+        }
+      }
+
+      showActionControls() {
+        const bar = document.getElementById('action-bar');
+        bar.classList.remove('hidden');
+        // If leading trick, Pass is disabled
+        document.getElementById('btn-pass').disabled = (!this.currentTrick);
+      }
+
+      handlePlayerPlay() {
+        const selectedIds = this.table3D.selectedCardIds;
+        if (selectedIds.size === 0) {
+          this.showToast('Select cards to play first!');
+          return;
+        }
+
+        const selectedCards = this.hands[0].filter(c => selectedIds.has(c.id));
+        const combo = RulesEngine.parseCombination(selectedCards);
+
+        if (!combo) {
+          this.showToast('Invalid card combination!');
+          return;
+        }
+
+        if (this.currentTrick) {
+          if (!RulesEngine.canBeat(combo, this.currentTrick.combo)) {
+            this.showToast('Combination does not beat current cards on table!');
+            return;
+          }
+        }
+
+        this.executePlayCards(0, selectedCards, combo);
+      }
+
+      handlePlayerPass() {
+        if (!this.currentTrick) {
+          this.showToast('You have the lead! You cannot pass.');
+          return;
+        }
+        this.executePass(0);
+      }
+
+      handlePlayerHint() {
+        // Find beating cards for human player
+        const partnerSeat = this.roles[0] === 'peasant' ? (this.roles[1] === 'peasant' ? 1 : 2) : null;
+        const suggestion = DouDizhuAI.selectMove(
+          this.hands[0],
+          this.currentTrick,
+          this.roles[0],
+          this.landlordSeat,
+          0,
+          partnerSeat
+        );
+
+        this.table3D.selectedCardIds.clear();
+        if (suggestion && suggestion.length > 0) {
+          suggestion.forEach(c => this.table3D.selectedCardIds.add(c.id));
+          this.showToast('Suggested cards highlighted.');
+        } else {
+          this.showToast('No beating cards available. Consider Passing.');
+        }
+        this.syncSelectedCardsUI();
+      }
+
+      executePlayCards(seat, cardsToPlay, parsedCombo = null) {
+        document.getElementById('action-bar').classList.add('hidden');
+        const combo = parsedCombo || RulesEngine.parseCombination(cardsToPlay);
+
+        // Remove cards from player hand
+        const playedIds = new Set(cardsToPlay.map(c => c.id));
+        this.hands[seat] = this.hands[seat].filter(c => !playedIds.has(c.id));
+        if (seat === 0) this.table3D.selectedCardIds.clear();
+
+        // Check for Bomb or Rocket multiplier boost
+        if (combo.type === COMBO_TYPES.BOMB || combo.type === COMBO_TYPES.ROCKET) {
+          this.multiplier *= 2;
+          document.getElementById('multiplier-badge').innerText = `x${this.multiplier}`;
+          audio.playBomb();
+          this.showToast(`💥 ${combo.type === COMBO_TYPES.ROCKET ? 'ROCKET!' : 'BOMB!'} Multiplier doubled to x${this.multiplier}!`);
+        } else {
+          audio.playCardPlay();
+        }
+
+        // Remove any prior cards played by THIS seat in this trick so they don't overlap
+        const seatKey = seat === 0 ? 'player' : (seat === 1 ? 'ai_left' : 'ai_right');
+        if (this.lastPlays[seatKey] && this.lastPlays[seatKey].length > 0) {
+          this.table3D.removePlayedCards(this.lastPlays[seatKey]);
+        }
+
+        // Update Trick State
+        this.currentTrick = { seat, combo, cards: cardsToPlay };
+        this.consecutivePasses = 0;
+        this.lastPlays[seatKey] = cardsToPlay;
+        this.showAIBubble(seat, combo.type.replace('_', ' '));
+
+        this.update3DScene(true);
+        this.updateCardCounts();
+
+        // Check Win Condition
+        if (this.hands[seat].length === 0) {
+          this.handleVictory(seat);
+          return;
+        }
+
+        // Rotate Turn
+        this.currentTurn = (this.currentTurn + 1) % 3;
+        setTimeout(() => this.nextPlayTurn(), 1000);
+      }
+
+      executePass(seat) {
+        document.getElementById('action-bar').classList.add('hidden');
+        this.consecutivePasses++;
+
+        const seatKey = seat === 0 ? 'player' : (seat === 1 ? 'ai_left' : 'ai_right');
+        // Clear previous cards played by this passing seat from the table
+        if (this.lastPlays[seatKey] && this.lastPlays[seatKey].length > 0) {
+          this.table3D.removePlayedCards(this.lastPlays[seatKey]);
+          this.lastPlays[seatKey] = [];
+        }
+        this.showAIBubble(seat, 'Pass');
+
+        // Check if trick has concluded (two consecutive passes)
+        if (this.consecutivePasses >= 2 && this.currentTrick) {
+          const trickWinnerSeat = this.currentTrick.seat;
+          const winnerName = trickWinnerSeat === 0 ? 'You' : (trickWinnerSeat === 1 ? 'AI Left' : 'AI Right');
+          this.showToast(`${winnerName} won the trick! Starting next round...`);
+
+          // Brief delay so players can see the pass, then clear all played cards on table
+          setTimeout(() => {
+            this.table3D.clearAllPlayedCards();
+            this.lastPlays = { player: [], ai_left: [], ai_right: [] };
+            this.currentTrick = null;
+            this.consecutivePasses = 0;
+            this.currentTurn = trickWinnerSeat;
+            this.update3DScene(true);
+            this.nextPlayTurn();
+          }, 900);
+          return;
+        }
+
+        // Rotate Turn
+        this.currentTurn = (this.currentTurn + 1) % 3;
+        setTimeout(() => this.nextPlayTurn(), 800);
+      }
+
+      handleVictory(winningSeat) {
+        this.gameState = 'GAME_OVER';
+        audio.playWin();
+
+        const winnerIsLandlord = (winningSeat === this.landlordSeat);
+        const playerIsWinner = winnerIsLandlord ? (this.landlordSeat === 0) : (this.roles[0] === 'peasant');
+        const payout = this.currentRoom.baseBet * this.multiplier * (winnerIsLandlord ? 2 : 1);
+
+        const coinChange = playerIsWinner ? payout : -payout;
+        this.addCoins(coinChange);
+
+        // Show Summary Dialog
+        const modal = document.getElementById('game-over-modal');
+        const title = document.getElementById('win-title');
+        const desc = document.getElementById('win-description');
+        const iconWrapper = document.getElementById('win-icon-wrapper');
+        const changeEl = document.getElementById('summary-coin-change');
+
+        document.getElementById('summary-base-bet').innerText = this.currentRoom.baseBet.toLocaleString();
+        document.getElementById('summary-multiplier').innerText = `x${this.multiplier}`;
+
+        if (playerIsWinner) {
+          title.innerText = 'Victory!';
+          title.className = 'text-2xl font-black text-amber-300 mb-1';
+          desc.innerText = `Your team (${winnerIsLandlord ? 'Landlord' : 'Peasants'}) cleared all cards first!`;
+          iconWrapper.innerHTML = '🏆';
+          changeEl.innerText = `+${payout.toLocaleString()}`;
+          changeEl.className = 'text-green-400 text-base font-black';
+        } else {
+          title.innerText = 'Defeat!';
+          title.className = 'text-2xl font-black text-red-400 mb-1';
+          desc.innerText = `${winnerIsLandlord ? 'Landlord' : 'Peasants'} won this round.`;
+          iconWrapper.innerHTML = '💀';
+          changeEl.innerText = `-${payout.toLocaleString()}`;
+          changeEl.className = 'text-red-400 text-base font-black';
+        }
+
+        modal.classList.remove('hidden');
+      }
+
+      update3DScene(diPaiRevealed = false) {
+        this.table3D.layoutHands(
+          this.hands[0],
+          this.hands[1],
+          this.hands[2],
+          this.diPai,
+          diPaiRevealed
+        );
+        this.table3D.layoutPlayedCards(this.lastPlays);
+      }
+
+      syncSelectedCardsUI() {
+        this.table3D.layoutHands(
+          this.hands[0],
+          this.hands[1],
+          this.hands[2],
+          this.diPai,
+          this.gameState !== 'BIDDING'
+        );
+      }
+
+      showToast(msg) {
+        const toast = document.getElementById('center-toast');
+        const text = document.getElementById('center-toast-msg');
+        text.innerText = msg;
+        toast.classList.remove('opacity-0', 'scale-95');
+        toast.classList.add('opacity-100', 'scale-100');
+
+        clearTimeout(this.toastTimer);
+        this.toastTimer = setTimeout(() => {
+          toast.classList.remove('opacity-100', 'scale-100');
+          toast.classList.add('opacity-0', 'scale-95');
+        }, 2200);
+      }
+
+      showAIBubble(seat, text) {
+        const bubbleId = seat === 1 ? 'ai-left-bubble' : (seat === 2 ? 'ai-right-bubble' : null);
+        if (!bubbleId) return;
+        const el = document.getElementById(bubbleId);
+        el.innerText = text;
+        el.classList.remove('hidden');
+        setTimeout(() => el.classList.add('hidden'), 1500);
+      }
+
+      initCheatMenu() {
+        const modal = document.getElementById('cheat-modal');
+        const toggleBtn = document.getElementById('btn-cheat-toggle');
+        const closeBtn = document.getElementById('btn-close-cheat');
+
+        const toggleCheat = () => {
+          modal.classList.toggle('hidden');
+          if (!modal.classList.contains('hidden')) {
+            this.refreshCheatUI();
+          }
+        };
+
+        toggleBtn.addEventListener('click', toggleCheat);
+        closeBtn.addEventListener('click', toggleCheat);
+
+        window.addEventListener('keydown', (e) => {
+          if (e.key === 'c' || e.key === 'C') {
+            toggleCheat();
+          }
+        });
+
+        // Tab Navigation
+        document.querySelectorAll('.cheat-tab-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            document.querySelectorAll('.cheat-tab-btn').forEach(b => {
+              b.className = 'cheat-tab-btn px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200';
+            });
+            btn.className = 'cheat-tab-btn px-3 py-1.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40';
+
+            const tab = btn.getAttribute('data-tab');
+            document.querySelectorAll('.cheat-tab-content').forEach(c => c.classList.add('hidden'));
+            document.getElementById(`tab-content-${tab}`).classList.remove('hidden');
+            this.refreshCheatUI();
+          });
+        });
+
+        // 1. X-Ray 3D Card Face-Up Toggle
+        document.getElementById('toggle-xray-3d').addEventListener('change', (e) => {
+          this.table3D.xrayActive = e.target.checked;
+          this.update3DScene(true);
+        });
+
+        // 2. Card Swapper Action
+        document.getElementById('btn-execute-swap').addEventListener('click', () => {
+          this.executeCardSwap();
+        });
+
+        // 3. Card Customizer Action
+        document.getElementById('btn-execute-customize').addEventListener('click', () => {
+          this.executeCardCustomize();
+        });
+
+        // 4. Force Pass & Instant Win
+        document.getElementById('btn-force-pass').addEventListener('click', () => {
+          this.table3D.clearAllPlayedCards();
+          this.lastPlays = { player: [], ai_left: [], ai_right: [] };
+          this.consecutivePasses = 0;
+          this.currentTrick = null;
+          this.currentTurn = 0;
+          this.update3DScene(true);
+          this.showToast('Forced opponents to Pass! Table cleared, you have the lead.');
+          modal.classList.add('hidden');
+          this.showActionControls();
+        });
+
+        document.getElementById('btn-instant-win').addEventListener('click', () => {
+          modal.classList.add('hidden');
+          this.handleVictory(0);
+        });
+
+        document.getElementById('btn-cheat-add-coins').addEventListener('click', () => {
+          this.addCoins(10000);
+          this.showToast('Cheat Applied: +10,000 Coins injected!');
+        });
+      }
+
+      refreshCheatUI() {
+        // Update X-Ray Cards List
+        const renderCards = (cards, containerId, countId) => {
+          const container = document.getElementById(containerId);
+          document.getElementById(countId).innerText = `${cards.length} cards`;
+          container.innerHTML = '';
+          cards.forEach(c => {
+            const isRed = (c.suit === 'hearts' || c.suit === 'diamonds' || c.rank === 17);
+            const suitIcon = { spades: '♠', hearts: '♥', clubs: '♣', diamonds: '♦' }[c.suit] || '★';
+            const rankName = RANKS[c.rank].name;
+            const cardEl = document.createElement('div');
+            cardEl.className = `px-2 py-0.5 rounded bg-white text-slate-900 font-bold text-xs flex items-center gap-0.5 ${isRed ? 'text-red-600' : 'text-slate-900'} shadow-sm`;
+            cardEl.innerHTML = `<span>${rankName}</span><span class="text-[10px]">${suitIcon}</span>`;
+            container.appendChild(cardEl);
+          });
+        };
+
+        renderCards(this.hands[1], 'xray-ai-left-cards', 'xray-left-count');
+        renderCards(this.hands[2], 'xray-ai-right-cards', 'xray-right-count');
+
+        // Populate Swapper Selects
+        const oppTargetSeat = parseInt(document.getElementById('swap-opponent-target').value, 10);
+        const oppCards = this.hands[oppTargetSeat];
+        const oppSelect = document.getElementById('swap-opponent-card');
+        oppSelect.innerHTML = '';
+        oppCards.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.id;
+          opt.innerText = `${RANKS[c.rank].name} (${c.suit.toUpperCase()})`;
+          oppSelect.appendChild(opt);
+        });
+
+        const playerSelect = document.getElementById('swap-player-card');
+        playerSelect.innerHTML = '';
+        this.hands[0].forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.id;
+          opt.innerText = `${RANKS[c.rank].name} (${c.suit.toUpperCase()})`;
+          playerSelect.appendChild(opt);
+        });
+
+        // Populate Customizer Select
+        const customSourceSelect = document.getElementById('custom-source-card');
+        customSourceSelect.innerHTML = '';
+        this.hands[0].forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.id;
+          opt.innerText = `${RANKS[c.rank].name} (${c.suit.toUpperCase()})`;
+          customSourceSelect.appendChild(opt);
+        });
+      }
+
+      executeCardSwap() {
+        const oppSeat = parseInt(document.getElementById('swap-opponent-target').value, 10);
+        const oppCardId = document.getElementById('swap-opponent-card').value;
+        const playerCardId = document.getElementById('swap-player-card').value;
+
+        const oppCardIdx = this.hands[oppSeat].findIndex(c => c.id === oppCardId);
+        const playerCardIdx = this.hands[0].findIndex(c => c.id === playerCardId);
+
+        if (oppCardIdx === -1 || playerCardIdx === -1) {
+          this.showToast('Invalid swap selection.');
+          return;
+        }
+
+        // Swap cards in hands
+        const oppCard = this.hands[oppSeat][oppCardIdx];
+        const playerCard = this.hands[0][playerCardIdx];
+
+        this.hands[oppSeat][oppCardIdx] = playerCard;
+        this.hands[0][playerCardIdx] = oppCard;
+
+        this.sortHand(this.hands[0]);
+        this.sortHand(this.hands[oppSeat]);
+
+        this.update3DScene(this.gameState !== 'BIDDING');
+        this.refreshCheatUI();
+        this.showToast(`Swapped your ${RANKS[playerCard.rank].name} for opponent's ${RANKS[oppCard.rank].name}!`);
+      }
+
+      executeCardCustomize() {
+        const cardId = document.getElementById('custom-source-card').value;
+        const targetRank = parseInt(document.getElementById('custom-target-rank').value, 10);
+        const targetSuit = (targetRank >= 16) ? 'joker' : document.getElementById('custom-target-suit').value;
+
+        const card = this.hands[0].find(c => c.id === cardId);
+        if (!card) return;
+
+        card.rank = targetRank;
+        card.suit = targetSuit;
+
+        this.sortHand(this.hands[0]);
+        this.table3D.updateCardFace(card);
+        this.update3DScene(this.gameState !== 'BIDDING');
+        this.refreshCheatUI();
+        this.showToast(`Card transmuted into ${RANKS[targetRank].name} (${targetSuit})!`);
+      }
+    }
+
+    window.onload = () => {
+      window.game = new DouDizhuGame();
+    };
+  </script>
+</body>
+</html>
