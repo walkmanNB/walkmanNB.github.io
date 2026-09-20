@@ -1,0 +1,1349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Neon Beat 3D - 4-Lane Rhythm Game</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Three.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- Meyda Audio Feature Extraction Library CDN -->
+  <script src="https://unpkg.com/meyda/dist/web/meyda.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap');
+    
+    * {
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+
+    body {
+      font-family: 'Rajdhani', sans-serif;
+      background-color: #05050b;
+      color: #e2e8f0;
+      overflow: hidden;
+    }
+
+    .font-hud {
+      font-family: 'Orbitron', monospace;
+    }
+
+    /* Glow Effects */
+    .glow-cyan {
+      box-shadow: 0 0 25px rgba(6, 182, 212, 0.6), inset 0 0 15px rgba(6, 182, 212, 0.4);
+    }
+    .glow-magenta {
+      box-shadow: 0 0 25px rgba(236, 72, 153, 0.6), inset 0 0 15px rgba(236, 72, 153, 0.4);
+    }
+    .text-glow-cyan {
+      text-shadow: 0 0 12px rgba(6, 182, 212, 0.8), 0 0 25px rgba(6, 182, 212, 0.5);
+    }
+    .text-glow-magenta {
+      text-shadow: 0 0 12px rgba(236, 72, 153, 0.8), 0 0 25px rgba(236, 72, 153, 0.5);
+    }
+    .text-glow-gold {
+      text-shadow: 0 0 12px rgba(250, 204, 21, 0.9), 0 0 25px rgba(234, 179, 8, 0.6);
+    }
+
+    /* Track lane key active animation */
+    .lane-active {
+      filter: brightness(1.7);
+      transform: translateY(2px) scale(0.98);
+    }
+
+    /* Rating Popup Animation */
+    @keyframes hitPop {
+      0% { transform: translate(-50%, -40%) scale(0.6); opacity: 0; }
+      50% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+      80% { transform: translate(-50%, -50%) scale(1.0); opacity: 0.9; }
+      100% { transform: translate(-50%, -65%) scale(0.8); opacity: 0; }
+    }
+    .animate-hit {
+      animation: hitPop 0.45s ease-out forwards;
+    }
+
+    /* Custom scrollbar for song selection if needed */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #374151;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body class="w-screen h-screen relative bg-black select-none overflow-hidden">
+
+  <!-- 3D WebGL Canvas Layer -->
+  <div id="canvas-container" class="absolute inset-0 z-0"></div>
+
+  <!-- Ambient Perspective Grid Vignette Overlay -->
+  <div class="absolute inset-0 pointer-events-none bg-gradient-to-t from-black/80 via-transparent to-black/60 z-10"></div>
+
+  <!-- IN-GAME HUD LAYER -->
+  <div id="game-hud" class="absolute inset-0 pointer-events-none z-20 flex flex-col justify-between p-4 md:p-6 transition-opacity duration-300 opacity-0">
+    
+    <!-- Top Stats Bar -->
+    <div class="flex justify-between items-start w-full max-w-5xl mx-auto">
+      <!-- Score & Accuracy -->
+      <div class="flex flex-col space-y-1">
+        <span class="text-xs text-cyan-400 font-hud tracking-widest uppercase">Score</span>
+        <div id="hud-score" class="text-3xl md:text-5xl font-black font-hud text-white text-glow-cyan tracking-wider">0000000</div>
+        <div class="flex items-center space-x-3 text-sm font-semibold tracking-wider text-slate-300 font-hud">
+          <span id="hud-accuracy" class="text-emerald-400">100.0%</span>
+          <span class="text-slate-600">|</span>
+          <span id="hud-combo-counter" class="text-yellow-400">0 COMBO</span>
+        </div>
+      </div>
+
+      <!-- Song Progress & Pause / Abort -->
+      <div class="flex flex-col items-end space-y-2">
+        <div class="flex items-center space-x-2 text-xs font-hud text-slate-300">
+          <span id="hud-current-time">0:00</span>
+          <span>/</span>
+          <span id="hud-total-time">0:00</span>
+        </div>
+        <!-- Progress Bar -->
+        <div class="w-32 md:w-56 h-2 bg-slate-800/80 rounded-full overflow-hidden border border-slate-700/50">
+          <div id="hud-progress-bar" class="h-full bg-gradient-to-r from-cyan-500 via-indigo-500 to-pink-500 w-0 transition-all duration-100"></div>
+        </div>
+        <button id="btn-abort-song" class="pointer-events-auto mt-2 px-3 py-1 text-xs font-hud rounded bg-red-950/60 hover:bg-red-900 border border-red-500/40 text-red-300 transition-colors">
+          Exit Song
+        </button>
+      </div>
+    </div>
+
+    <!-- Center Judgement & Combo Burst Area -->
+    <div class="relative w-full flex flex-col items-center justify-center pointer-events-none mb-20">
+      <div id="judgement-display" class="absolute font-black font-hud text-3xl md:text-5xl tracking-widest uppercase opacity-0 transition-none">
+        PERFECT
+      </div>
+      <div id="combo-display-group" class="flex flex-col items-center mt-12 opacity-0 transition-opacity duration-200">
+        <span id="combo-count-large" class="text-4xl md:text-6xl font-black font-hud text-yellow-400 text-glow-gold">0</span>
+        <span class="text-xs tracking-[0.3em] font-hud text-yellow-200 uppercase">Combo</span>
+      </div>
+    </div>
+
+    <!-- Bottom Mobile/Desktop Lane Indicators & Touch Target Zone -->
+    <div class="w-full max-w-xl mx-auto pointer-events-auto">
+      <div id="lane-touch-panel" class="grid grid-cols-4 gap-2 md:gap-4 p-2 bg-slate-900/60 backdrop-blur-md rounded-2xl border border-slate-700/60 shadow-2xl">
+        <!-- Lane 0 -->
+        <div data-lane="0" class="lane-trigger relative flex flex-col items-center justify-center h-20 md:h-24 rounded-xl border border-cyan-500/30 bg-cyan-950/30 active:bg-cyan-500/40 transition-all duration-75 cursor-pointer select-none">
+          <span class="font-hud font-black text-2xl md:text-3xl text-cyan-300">D</span>
+          <span class="text-[10px] md:text-xs text-cyan-400/70 font-semibold tracking-wider uppercase">Lane 1</span>
+          <div class="lane-glow-bar absolute bottom-1 w-8 h-1 bg-cyan-400 rounded-full opacity-60"></div>
+        </div>
+        <!-- Lane 1 -->
+        <div data-lane="1" class="lane-trigger relative flex flex-col items-center justify-center h-20 md:h-24 rounded-xl border border-blue-500/30 bg-blue-950/30 active:bg-blue-500/40 transition-all duration-75 cursor-pointer select-none">
+          <span class="font-hud font-black text-2xl md:text-3xl text-blue-300">F</span>
+          <span class="text-[10px] md:text-xs text-blue-400/70 font-semibold tracking-wider uppercase">Lane 2</span>
+          <div class="lane-glow-bar absolute bottom-1 w-8 h-1 bg-blue-400 rounded-full opacity-60"></div>
+        </div>
+        <!-- Lane 2 -->
+        <div data-lane="2" class="lane-trigger relative flex flex-col items-center justify-center h-20 md:h-24 rounded-xl border border-purple-500/30 bg-purple-950/30 active:bg-purple-500/40 transition-all duration-75 cursor-pointer select-none">
+          <span class="font-hud font-black text-2xl md:text-3xl text-purple-300">J</span>
+          <span class="text-[10px] md:text-xs text-purple-400/70 font-semibold tracking-wider uppercase">Lane 3</span>
+          <div class="lane-glow-bar absolute bottom-1 w-8 h-1 bg-purple-400 rounded-full opacity-60"></div>
+        </div>
+        <!-- Lane 3 -->
+        <div data-lane="3" class="lane-trigger relative flex flex-col items-center justify-center h-20 md:h-24 rounded-xl border border-pink-500/30 bg-pink-950/30 active:bg-pink-500/40 transition-all duration-75 cursor-pointer select-none">
+          <span class="font-hud font-black text-2xl md:text-3xl text-pink-300">K</span>
+          <span class="text-[10px] md:text-xs text-pink-400/70 font-semibold tracking-wider uppercase">Lane 4</span>
+          <div class="lane-glow-bar absolute bottom-1 w-8 h-1 bg-pink-400 rounded-full opacity-60"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN MENU / SETUP OVERLAY -->
+  <div id="menu-overlay" class="absolute inset-0 z-30 flex items-center justify-center p-4 bg-black/85 backdrop-blur-lg">
+    <div class="w-full max-w-lg bg-slate-900/90 border border-slate-700/80 rounded-3xl p-6 md:p-8 shadow-2xl flex flex-col items-center text-center relative overflow-hidden">
+      <!-- Decorative Neon Bar -->
+      <div class="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-cyan-400 via-purple-500 to-pink-500"></div>
+
+      <!-- Title & Branding -->
+      <div class="mb-6">
+        <h1 class="font-hud text-3xl md:text-5xl font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-indigo-200 to-pink-400">
+          NEON BEAT 3D
+        </h1>
+        <p class="text-sm md:text-base text-slate-400 mt-2">
+          Sync your music into a 3D rhythm battleground.
+        </p>
+      </div>
+
+      <!-- File Upload Dropzone -->
+      <div id="drop-zone" class="w-full border-2 border-dashed border-cyan-500/40 hover:border-cyan-400 hover:bg-cyan-950/20 rounded-2xl p-6 transition-all cursor-pointer flex flex-col items-center justify-center group mb-4">
+        <input type="file" id="audio-file-input" accept="audio/mp3,audio/wav,audio/ogg,audio/mpeg" class="hidden" />
+        <svg class="w-12 h-12 text-cyan-400 mb-3 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+        </svg>
+        <p class="font-bold text-slate-200 text-sm md:text-base group-hover:text-cyan-300">
+          Drop your song here or <span class="text-cyan-400 underline decoration-cyan-400/50">Browse</span>
+        </p>
+        <p class="text-xs text-slate-400 mt-1">Supports MP3, WAV, OGG audio formats</p>
+        <span id="selected-file-name" class="mt-2 text-xs font-mono text-cyan-300 bg-cyan-950/50 px-3 py-1 rounded-full hidden truncate max-w-[280px]"></span>
+      </div>
+
+      <!-- Divider -->
+      <div class="flex items-center w-full my-2">
+        <div class="flex-grow border-t border-slate-700"></div>
+        <span class="px-3 text-xs uppercase tracking-widest text-slate-500 font-hud">OR USE PRESET</span>
+        <div class="flex-grow border-t border-slate-700"></div>
+      </div>
+
+      <!-- Quick Demo Track Button -->
+      <button id="btn-play-demo" class="w-full py-3 px-4 rounded-xl font-hud font-bold text-sm bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-600 hover:to-indigo-600 text-white shadow-lg transition-all transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center space-x-2">
+        <svg class="w-5 h-5 text-pink-300" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+        </svg>
+        <span>Play Built-in Synthwave Anthem</span>
+      </button>
+
+      <!-- Settings Row (Scroll Speed & Difficulty) -->
+      <div class="w-full grid grid-cols-2 gap-3 mt-4 text-left">
+        <div class="bg-slate-800/60 p-3 rounded-xl border border-slate-700/50">
+          <label class="block text-xs font-hud text-slate-400 mb-1">Scroll Speed</label>
+          <select id="select-speed" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-sm font-semibold text-cyan-300 focus:outline-none focus:border-cyan-400">
+            <option value="1.0">Normal (1.0x)</option>
+            <option value="1.25" selected>Fast (1.25x)</option>
+            <option value="1.5">Hyper (1.5x)</option>
+            <option value="0.8">Gentle (0.8x)</option>
+          </select>
+        </div>
+        <div class="bg-slate-800/60 p-3 rounded-xl border border-slate-700/50">
+          <label class="block text-xs font-hud text-slate-400 mb-1">Onset Sensitivity</label>
+          <select id="select-sensitivity" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-sm font-semibold text-purple-300 focus:outline-none focus:border-purple-400">
+            <option value="high">High (More Notes)</option>
+            <option value="balanced" selected>Balanced (Standard)</option>
+            <option value="relaxed">Relaxed (Main Beats)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Controls Guidance -->
+      <div class="mt-4 text-xs text-slate-400 flex items-center justify-center space-x-4">
+        <span>Desktop: <kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-600 rounded text-cyan-300">D</kbd> <kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-600 rounded text-cyan-300">F</kbd> <kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-600 rounded text-pink-300">J</kbd> <kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-600 rounded text-pink-300">K</kbd></span>
+        <span>•</span>
+        <span>Mobile: Direct Touch</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ANALYSIS & DECODING LOADING MODAL -->
+  <div id="loading-modal" class="absolute inset-0 z-40 flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl hidden">
+    <div class="flex flex-col items-center max-w-sm text-center">
+      <!-- Spinning Neon Ring -->
+      <div class="relative w-20 h-20 mb-6">
+        <div class="absolute inset-0 rounded-full border-4 border-cyan-500/20"></div>
+        <div class="absolute inset-0 rounded-full border-4 border-cyan-400 border-t-transparent animate-spin"></div>
+        <div class="absolute inset-2 rounded-full border-4 border-pink-500/20"></div>
+        <div class="absolute inset-2 rounded-full border-4 border-pink-400 border-b-transparent animate-spin" style="animation-direction: reverse; animation-duration: 1.5s;"></div>
+      </div>
+      <h3 id="loading-title" class="text-xl font-hud font-bold text-white mb-2">Analyzing Music...</h3>
+      <p id="loading-desc" class="text-sm text-slate-400 leading-relaxed mb-4">
+        Running Meyda spectral onset detection & transient alignment across audio buffer...
+      </p>
+      <div class="w-64 h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+        <div id="loading-bar" class="h-full bg-cyan-400 w-1/4 transition-all duration-300"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GAME OVER / RESULTS MODAL -->
+  <div id="results-modal" class="absolute inset-0 z-40 flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl hidden">
+    <div class="w-full max-w-md bg-slate-900 border border-slate-700 rounded-3xl p-6 md:p-8 flex flex-col items-center text-center shadow-2xl">
+      <h2 class="text-2xl font-hud font-black text-cyan-400 tracking-wider">TRACK COMPLETE</h2>
+      
+      <!-- Rank Grade Badge -->
+      <div id="result-rank" class="w-24 h-24 my-4 rounded-full border-4 border-yellow-400 flex items-center justify-center text-5xl font-black font-hud text-yellow-300 text-glow-gold bg-yellow-950/20">
+        S
+      </div>
+
+      <!-- Stats List -->
+      <div class="w-full space-y-2 mb-6 text-sm font-semibold">
+        <div class="flex justify-between py-1.5 border-b border-slate-800">
+          <span class="text-slate-400 font-hud">Final Score</span>
+          <span id="result-score" class="text-cyan-300 font-hud font-bold text-base">0</span>
+        </div>
+        <div class="flex justify-between py-1.5 border-b border-slate-800">
+          <span class="text-slate-400 font-hud">Max Combo</span>
+          <span id="result-max-combo" class="text-yellow-400 font-hud font-bold text-base">0</span>
+        </div>
+        <div class="flex justify-between py-1.5 border-b border-slate-800">
+          <span class="text-slate-400 font-hud">Accuracy</span>
+          <span id="result-accuracy" class="text-emerald-400 font-hud font-bold text-base">100.0%</span>
+        </div>
+        <div class="grid grid-cols-4 gap-2 pt-2 text-center text-xs font-hud">
+          <div class="bg-slate-800/70 p-2 rounded-lg">
+            <div class="text-cyan-300 font-bold" id="result-perfect">0</div>
+            <div class="text-[10px] text-slate-400">PERFECT</div>
+          </div>
+          <div class="bg-slate-800/70 p-2 rounded-lg">
+            <div class="text-green-300 font-bold" id="result-great">0</div>
+            <div class="text-[10px] text-slate-400">GREAT</div>
+          </div>
+          <div class="bg-slate-800/70 p-2 rounded-lg">
+            <div class="text-yellow-300 font-bold" id="result-good">0</div>
+            <div class="text-[10px] text-slate-400">GOOD</div>
+          </div>
+          <div class="bg-slate-800/70 p-2 rounded-lg">
+            <div class="text-red-400 font-bold" id="result-miss">0</div>
+            <div class="text-[10px] text-slate-400">MISS</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="flex space-x-3 w-full">
+        <button id="btn-replay" class="flex-1 py-3 font-hud font-bold rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 transition-colors shadow-lg">
+          Replay
+        </button>
+        <button id="btn-return-menu" class="flex-1 py-3 font-hud font-bold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors">
+          Main Menu
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notification Toast Container -->
+  <div id="toast-message" class="fixed top-6 inset-x-0 mx-auto w-max max-w-sm px-4 py-2 bg-slate-800/95 border border-cyan-500/60 rounded-full text-xs font-semibold text-cyan-200 text-center shadow-2xl z-50 pointer-events-none transform -translate-y-16 transition-transform duration-300 opacity-0">
+  </div>
+
+  <script>
+    // Game Physics & Layout Parameters
+    const CONFIG = {
+      lanesCount: 4,
+      laneWidth: 2.2,
+      laneSpacing: 0.2,
+      trackLength: 60.0,
+      noteSpeed: 30.0, // Units per second along the Z-axis
+      targetZ: 6.0,     // Z coordinate of the judgment line
+      spawnZ: -50.0,    // Spawn point far up the track
+      timingWindows: {
+        perfect: 0.07,  // ±70ms
+        great: 0.13,    // ±130ms
+        good: 0.20,     // ±200ms
+        miss: 0.25      // Passing threshold
+      },
+      laneColors: [0x06b6d4, 0x3b82f6, 0xa855f7, 0xec4899], // Cyan, Blue, Purple, Pink
+      laneHexStrings: ['#06b6d4', '#3b82f6', '#a855f7', '#ec4899'],
+      keys: ['KeyD', 'KeyF', 'KeyJ', 'KeyK']
+    };
+
+    // Global Runtime State
+    const state = {
+      isPlaying: false,
+      audioBuffer: null,
+      audioSource: null,
+      audioCtx: null,
+      songStartTime: 0,
+      songDuration: 0,
+      notes: [],          // Note data objects: { time, lane, hit, mesh }
+      activeNotes: [],    // Currently active notes in scene
+      score: 0,
+      combo: 0,
+      maxCombo: 0,
+      counts: { perfect: 0, great: 0, good: 0, miss: 0 },
+      scrollMultiplier: 1.25,
+      onsetSensitivity: 'balanced',
+      lastUploadedFile: null
+    };
+
+    // Native Web Audio API Sound Effects (Zero External Asset Dependency)
+    let sfxAudioCtx = null;
+    function getAudioContext() {
+      if (!state.audioCtx) {
+        const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+        state.audioCtx = new AudioCtxClass();
+      }
+      if (state.audioCtx.state === 'suspended') {
+        state.audioCtx.resume();
+      }
+      return state.audioCtx;
+    }
+
+    // Play synthesized mechanical hit click / sound
+    function playHitSound(quality) {
+      try {
+        const ctx = getAudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        const now = ctx.currentTime;
+        let baseFreq = 880;
+        if (quality === 'perfect') baseFreq = 1200;
+        else if (quality === 'great') baseFreq = 950;
+        else if (quality === 'good') baseFreq = 700;
+
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(baseFreq, now);
+        osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.5, now + 0.04);
+
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+        osc.start(now);
+        osc.stop(now + 0.08);
+      } catch (err) {
+        // Safe failover for audio policy restrictions
+      }
+    }
+
+    // Play missed note low clank
+    function playMissSound() {
+      try {
+        const ctx = getAudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        const now = ctx.currentTime;
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(140, now);
+        osc.frequency.linearRampToValueAtTime(60, now + 0.12);
+
+        gain.gain.setValueAtTime(0.18, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+
+        osc.start(now);
+        osc.stop(now + 0.12);
+      } catch (err) {}
+    }
+
+    let scene, camera, renderer;
+    let trackLanes = [];
+    let judgmentLineMesh;
+    let laneTargetMeshes = [];
+    let particleSystem;
+    const activeHitParticles = [];
+
+    function initThreeScene() {
+      const container = document.getElementById('canvas-container');
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+
+      // Scene setup
+      scene = new THREE.Scene();
+      scene.fog = new THREE.FogExp2(0x05050b, 0.022);
+
+      // Camera positioned looking down the tracks
+      camera = new THREE.PerspectiveCamera(56, width / height, 0.1, 200);
+      camera.position.set(0, 5.2, CONFIG.targetZ + 5.5);
+      camera.lookAt(0, 0.8, -12);
+
+      // WebGL Renderer
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(width, height);
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.1;
+      container.appendChild(renderer.domElement);
+
+      // Ambient & Directional Lighting
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+      scene.add(ambientLight);
+
+      const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+      dirLight.position.set(5, 12, 10);
+      scene.add(dirLight);
+
+      buildTrackEnvironment();
+      buildParticlePool();
+
+      // Responsive Resize
+      window.addEventListener('resize', onWindowResize);
+    }
+
+    function onWindowResize() {
+      const container = document.getElementById('canvas-container');
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height);
+    }
+
+    function getLaneX(laneIndex) {
+      const totalWidth = (CONFIG.lanesCount - 1) * (CONFIG.laneWidth + CONFIG.laneSpacing);
+      return -totalWidth / 2 + laneIndex * (CONFIG.laneWidth + CONFIG.laneSpacing);
+    }
+
+    function buildTrackEnvironment() {
+      // Base Floor Grid
+      const gridHelper = new THREE.GridHelper(120, 60, 0x1e293b, 0x0f172a);
+      gridHelper.position.set(0, -0.05, -20);
+      scene.add(gridHelper);
+
+      // Track Lanes (4 Strips)
+      for (let i = 0; i < CONFIG.lanesCount; i++) {
+        const laneX = getLaneX(i);
+
+        // Dark reflective lane runway
+        const runwayGeo = new THREE.PlaneGeometry(CONFIG.laneWidth, CONFIG.trackLength);
+        const runwayMat = new THREE.MeshStandardMaterial({
+          color: 0x0b0f19,
+          roughness: 0.3,
+          metalness: 0.8,
+          side: THREE.DoubleSide
+        });
+        const runway = new THREE.Mesh(runwayGeo, runwayMat);
+        runway.rotation.x = -Math.PI / 2;
+        runway.position.set(laneX, 0, (CONFIG.spawnZ + CONFIG.targetZ) / 2);
+        scene.add(runway);
+
+        // Neon border stripes along each lane
+        const borderGeo = new THREE.BoxGeometry(0.06, 0.04, CONFIG.trackLength);
+        const borderMat = new THREE.MeshBasicMaterial({ color: CONFIG.laneColors[i] });
+        
+        const leftBorder = new THREE.Mesh(borderGeo, borderMat);
+        leftBorder.position.set(laneX - CONFIG.laneWidth / 2, 0.02, (CONFIG.spawnZ + CONFIG.targetZ) / 2);
+        scene.add(leftBorder);
+
+        const rightBorder = new THREE.Mesh(borderGeo, borderMat);
+        rightBorder.position.set(laneX + CONFIG.laneWidth / 2, 0.02, (CONFIG.spawnZ + CONFIG.targetZ) / 2);
+        scene.add(rightBorder);
+
+        // Key Target Receptor at the Judgment Line
+        const receptorGeo = new THREE.BoxGeometry(CONFIG.laneWidth * 0.95, 0.12, 0.6);
+        const receptorMat = new THREE.MeshStandardMaterial({
+          color: CONFIG.laneColors[i],
+          emissive: CONFIG.laneColors[i],
+          emissiveIntensity: 0.3,
+          metalness: 0.5,
+          roughness: 0.2
+        });
+        const receptor = new THREE.Mesh(receptorGeo, receptorMat);
+        receptor.position.set(laneX, 0.06, CONFIG.targetZ);
+        scene.add(receptor);
+        laneTargetMeshes.push(receptor);
+      }
+
+      // Main Glowing Judgment Crossbar
+      const barWidth = (CONFIG.lanesCount * (CONFIG.laneWidth + CONFIG.laneSpacing)) + 0.8;
+      const barGeo = new THREE.BoxGeometry(barWidth, 0.08, 0.2);
+      const barMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      judgmentLineMesh = new THREE.Mesh(barGeo, barMat);
+      judgmentLineMesh.position.set(0, 0.05, CONFIG.targetZ);
+      scene.add(judgmentLineMesh);
+    }
+
+    function buildParticlePool() {
+      const count = 400;
+      const geometry = new THREE.BufferGeometry();
+      const positions = new Float32Array(count * 3);
+      const colors = new Float32Array(count * 3);
+
+      for (let i = 0; i < count; i++) {
+        positions[i * 3] = 0;
+        positions[i * 3 + 1] = -100;
+        positions[i * 3 + 2] = 0;
+
+        colors[i * 3] = 1;
+        colors[i * 3 + 1] = 1;
+        colors[i * 3 + 2] = 1;
+      }
+
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+      const material = new THREE.PointsMaterial({
+        size: 0.35,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.9,
+        blending: THREE.AdditiveBlending
+      });
+
+      particleSystem = new THREE.Points(geometry, material);
+      scene.add(particleSystem);
+    }
+
+    function spawnHitParticles(x, z, hexColor) {
+      const color = new THREE.Color(hexColor);
+      const numParticles = 24;
+
+      for (let i = 0; i < numParticles; i++) {
+        activeHitParticles.push({
+          x: x,
+          y: 0.3,
+          z: z,
+          vx: (Math.random() - 0.5) * 4.5,
+          vy: Math.random() * 4.0 + 2.0,
+          vz: (Math.random() - 0.5) * 4.5,
+          life: 1.0,
+          decay: Math.random() * 2.2 + 2.0,
+          color: color
+        });
+      }
+    }
+
+    function updateParticles(dt) {
+      if (!particleSystem) return;
+      const posAttr = particleSystem.geometry.attributes.position;
+      const colAttr = particleSystem.geometry.attributes.color;
+
+      for (let i = activeHitParticles.length - 1; i >= 0; i--) {
+        const p = activeHitParticles[i];
+        p.life -= p.decay * dt;
+        if (p.life <= 0) {
+          activeHitParticles.splice(i, 1);
+          continue;
+        }
+
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.z += p.vz * dt;
+        p.vy -= 9.8 * dt; // Gravity
+      }
+
+      const total = posAttr.count;
+      for (let i = 0; i < total; i++) {
+        if (i < activeHitParticles.length) {
+          const p = activeHitParticles[i];
+          posAttr.setXYZ(i, p.x, p.y, p.z);
+          colAttr.setXYZ(i, p.color.r * p.life, p.color.g * p.life, p.color.b * p.life);
+        } else {
+          posAttr.setXYZ(i, 0, -999, 0);
+        }
+      }
+
+      posAttr.needsUpdate = true;
+      colAttr.needsUpdate = true;
+    }
+
+    const noteGeometry = new THREE.BoxGeometry(CONFIG.laneWidth * 0.9, 0.28, 0.7);
+
+    function createNoteMesh(laneIndex) {
+      const color = CONFIG.laneColors[laneIndex];
+      const material = new THREE.MeshStandardMaterial({
+        color: color,
+        emissive: color,
+        emissiveIntensity: 0.7,
+        roughness: 0.15,
+        metalness: 0.3
+      });
+      const mesh = new THREE.Mesh(noteGeometry, material);
+      mesh.position.set(getLaneX(laneIndex), 0.16, CONFIG.spawnZ);
+      return mesh;
+    }
+
+    // Meyda-driven Spectral Transient & Beat Alignment Engine
+    async function analyzeAudioBuffer(audioBuffer) {
+      updateLoadingUI(20, 'Decoding & Extracting Waveform Data...');
+      
+      const channelData = audioBuffer.getChannelData(0);
+      const sampleRate = audioBuffer.sampleRate;
+      const bufferSize = 1024;
+      const hopSize = 512;
+      const totalFrames = Math.floor((channelData.length - bufferSize) / hopSize);
+
+      updateLoadingUI(40, 'Running Meyda Spectral Flux Analysis...');
+      await new Promise(r => setTimeout(r, 40));
+
+      const spectralFluxValues = [];
+      const energyValues = [];
+      const timestamps = [];
+
+      // Check if Meyda is loaded in environment
+      const hasMeyda = typeof Meyda !== 'undefined';
+
+      // Iterate through hops and extract spectral features
+      let prevSpectrum = null;
+      for (let i = 0; i < totalFrames; i++) {
+        const offset = i * hopSize;
+        const frame = channelData.subarray(offset, offset + bufferSize);
+        const timeSec = offset / sampleRate;
+        timestamps.push(timeSec);
+
+        if (hasMeyda) {
+          try {
+            const features = Meyda.extract(['energy', 'spectralFlux'], frame, prevSpectrum);
+            energyValues.push(features.energy || 0);
+            spectralFluxValues.push(features.spectralFlux || 0);
+          } catch (e) {
+            // Fallback native root-mean-square calculation
+            energyValues.push(calcNativeEnergy(frame));
+            spectralFluxValues.push(0);
+          }
+        } else {
+          energyValues.push(calcNativeEnergy(frame));
+          spectralFluxValues.push(0);
+        }
+      }
+
+      updateLoadingUI(75, 'Peak-Picking & Beat Transient Tracking...');
+      await new Promise(r => setTimeout(r, 30));
+
+      // Compute Onset Detection Function (ODF)
+      const odf = [];
+      for (let i = 0; i < timestamps.length; i++) {
+        const flux = spectralFluxValues[i] || 0;
+        const nrg = energyValues[i] || 0;
+        // Blend spectral transient flux with raw energy rise
+        odf.push(flux * 0.7 + nrg * 0.3);
+      }
+
+      // Adaptive Moving Threshold Peak Detection
+      const windowRadius = 7;
+      let thresholdMultiplier = 1.35;
+      if (state.onsetSensitivity === 'high') thresholdMultiplier = 1.15;
+      else if (state.onsetSensitivity === 'relaxed') thresholdMultiplier = 1.65;
+
+      const detectedOnsets = [];
+      const minDistanceSec = 0.13; // Minimum time between consecutive notes
+      let lastPeakTime = -1;
+
+      for (let i = windowRadius; i < odf.length - windowRadius; i++) {
+        const currentVal = odf[i];
+        
+        // Calculate local average in sliding window
+        let sum = 0;
+        for (let j = i - windowRadius; j <= i + windowRadius; j++) {
+          sum += odf[j];
+        }
+        const localMean = sum / (windowRadius * 2 + 1);
+        const threshold = localMean * thresholdMultiplier;
+
+        // Check if peak is maximum in its immediate window and above dynamic threshold
+        if (currentVal > threshold && currentVal > odf[i - 1] && currentVal >= odf[i + 1]) {
+          const peakTime = timestamps[i];
+          if (peakTime - lastPeakTime >= minDistanceSec && peakTime > 0.5) {
+            detectedOnsets.push(peakTime);
+            lastPeakTime = peakTime;
+          }
+        }
+      }
+
+      updateLoadingUI(90, 'Mapping Chords and Lane Trajectories...');
+      await new Promise(r => setTimeout(r, 20));
+
+      // Intelligent Lane Distribution Algorithm
+      // Avoids unplayable spam while generating rhythmic patterns (alternations, rolls, occasional doubles)
+      const generatedNotes = [];
+      let lastLane = 0;
+      let direction = 1;
+
+      for (let i = 0; i < detectedOnsets.length; i++) {
+        const noteTime = detectedOnsets[i];
+        
+        // Decide lane assignment based on rhythm density
+        let lane;
+        const timeDiff = i > 0 ? noteTime - detectedOnsets[i - 1] : 1.0;
+
+        if (timeDiff < 0.22) {
+          // Fast stream: cycle or alternate
+          lane = (lastLane + direction + CONFIG.lanesCount) % CONFIG.lanesCount;
+        } else if (timeDiff > 0.6) {
+          // New measure / transient drop: pick balanced lane
+          lane = Math.floor(Math.random() * CONFIG.lanesCount);
+          direction = Math.random() > 0.5 ? 1 : -1;
+        } else {
+          // Semi-steady beat
+          lane = (lastLane + (Math.random() > 0.4 ? 1 : -1) + CONFIG.lanesCount) % CONFIG.lanesCount;
+        }
+
+        generatedNotes.push({
+          id: i,
+          time: noteTime,
+          lane: lane,
+          hit: false,
+          mesh: null
+        });
+
+        // Add occasional simultaneous double note on strong transients if time allows
+        if (timeDiff > 0.75 && Math.random() < 0.35 && i < detectedOnsets.length - 1) {
+          const partnerLane = (lane + 2) % CONFIG.lanesCount;
+          generatedNotes.push({
+            id: i + 100000,
+            time: noteTime,
+            lane: partnerLane,
+            hit: false,
+            mesh: null
+          });
+        }
+
+        lastLane = lane;
+      }
+
+      // Sort notes chronologically
+      generatedNotes.sort((a, b) => a.time - b.time);
+
+      updateLoadingUI(100, 'Done!');
+      return generatedNotes;
+    }
+
+    function calcNativeEnergy(frame) {
+      let sum = 0;
+      for (let i = 0; i < frame.length; i++) {
+        sum += frame[i] * frame[i];
+      }
+      return Math.sqrt(sum / frame.length);
+    }
+
+    // Generates a punchy synthwave retro beat with kick, snare, hi-hat, bassline and arpeggios
+    function generateDemoSynthwaveBuffer(ctx) {
+      const sampleRate = ctx.sampleRate;
+      const bpm = 128;
+      const secondsPerBeat = 60 / bpm;
+      const totalMeasures = 16;
+      const duration = totalMeasures * 4 * secondsPerBeat; // ~30 seconds
+      const buffer = ctx.createBuffer(2, sampleRate * duration, sampleRate);
+      const left = buffer.getChannelData(0);
+      const right = buffer.getChannelData(1);
+
+      const totalSamples = left.length;
+
+      // Fill with procedural electronic music
+      for (let i = 0; i < totalSamples; i++) {
+        const t = i / sampleRate;
+        const beat = t / secondsPerBeat;
+        const beatFraction = beat % 1.0;
+        const currentBeatIndex = Math.floor(beat);
+
+        let sample = 0;
+
+        // 1. Four-on-the-floor Kick Drum
+        const kickEnv = Math.max(0, 1.0 - beatFraction * 7.0);
+        const kickFreq = 120 * Math.exp(-beatFraction * 14.0) + 45;
+        const kick = Math.sin(2 * Math.PI * kickFreq * beatFraction * secondsPerBeat) * kickEnv * 0.85;
+
+        // 2. Snare / Clap on beats 2 and 4
+        let snare = 0;
+        if (currentBeatIndex % 2 === 1) {
+          const snareEnv = Math.max(0, 1.0 - beatFraction * 4.5);
+          const noise = (Math.random() * 2 - 1) * snareEnv * 0.45;
+          const tone = Math.sin(2 * Math.PI * 180 * beatFraction) * snareEnv * 0.25;
+          snare = noise + tone;
+        }
+
+        // 3. 16th Note Hi-Hats
+        const sub16th = (beat * 4) % 1.0;
+        const hatEnv = Math.max(0, 1.0 - sub16th * 12.0);
+        const hat = (Math.random() * 2 - 1) * hatEnv * 0.15;
+
+        // 4. Rolling Synth Bassline (Sawtooth approximation)
+        const bassNotes = [55, 55, 65, 49]; // A, A, C, G roots
+        const currentMeasure = Math.floor(beat / 4) % bassNotes.length;
+        const rootFreq = bassNotes[currentMeasure];
+        const bassEnv = Math.max(0, 1.0 - sub16th * 2.8);
+        const bassPhase = (t * rootFreq) % 1.0;
+        const bass = (2 * bassPhase - 1) * bassEnv * 0.22;
+
+        // 5. Arpeggiated Melody Lead
+        const arpScale = [220, 261.63, 329.63, 392.00, 440, 523.25];
+        const arpNote = arpScale[Math.floor(beat * 4) % arpScale.length];
+        const leadPhase = (t * arpNote) % 1.0;
+        const lead = Math.sin(2 * Math.PI * leadPhase) * 0.18;
+
+        sample = kick + snare + hat + bass + lead;
+
+        // Master Limiter / Soft clipper
+        sample = Math.tanh(sample * 1.2);
+
+        left[i] = sample;
+        right[i] = sample;
+      }
+
+      return buffer;
+    }
+
+    async function startRhythmGame(audioBuffer, songTitle) {
+      state.audioBuffer = audioBuffer;
+      state.songDuration = audioBuffer.duration;
+
+      // Show Analysis Spinner
+      showLoadingModal('Analyzing Track', 'Computing precise onset beats with Meyda...');
+      
+      try {
+        state.notes = await analyzeAudioBuffer(audioBuffer);
+      } catch (err) {
+        console.error('Analysis error:', err);
+        showToast('Falling back to default beat map');
+      }
+
+      hideLoadingModal();
+
+      if (state.notes.length === 0) {
+        showToast('No prominent beats found. Please try another audio file.');
+        return;
+      }
+
+      // Reset gameplay score and state
+      state.score = 0;
+      state.combo = 0;
+      state.maxCombo = 0;
+      state.counts = { perfect: 0, great: 0, good: 0, miss: 0 };
+      state.activeNotes = [];
+
+      // Clean existing 3D note meshes
+      for (const n of state.notes) {
+        n.hit = false;
+        if (n.mesh) {
+          scene.remove(n.mesh);
+          n.mesh = null;
+        }
+      }
+
+      // Update UI HUD
+      document.getElementById('menu-overlay').classList.add('hidden');
+      document.getElementById('results-modal').classList.add('hidden');
+      document.getElementById('game-hud').classList.remove('opacity-0');
+      document.getElementById('hud-total-time').textContent = formatTime(state.songDuration);
+      updateScoreHUD();
+
+      // AudioContext Resume check
+      const ctx = getAudioContext();
+
+      // Create Audio Source
+      if (state.audioSource) {
+        try { state.audioSource.stop(); } catch (e) {}
+      }
+      state.audioSource = ctx.createBufferSource();
+      state.audioSource.buffer = audioBuffer;
+      state.audioSource.connect(ctx.destination);
+
+      // Lead-in delay for player readiness (1.5 seconds)
+      const leadIn = 1.5;
+      const scheduledAudioStart = ctx.currentTime + leadIn;
+      state.songStartTime = scheduledAudioStart;
+      state.audioSource.start(scheduledAudioStart);
+
+      state.isPlaying = true;
+      showToast(`Track Loaded: ${state.notes.length} Notes Synchronized!`);
+
+      // On song completion handler
+      state.audioSource.onended = () => {
+        if (state.isPlaying) {
+          setTimeout(finishTrackAndShowResults, 1200);
+        }
+      };
+    }
+
+    function checkLaneHit(laneIndex) {
+      if (!state.isPlaying) return;
+
+      const ctx = getAudioContext();
+      const currentSongTime = ctx.currentTime - state.songStartTime;
+      const speed = CONFIG.noteSpeed * state.scrollMultiplier;
+
+      // Find the closest unhit note in this lane within timing tolerance window
+      let candidate = null;
+      let minDiff = Infinity;
+
+      for (let i = 0; i < state.notes.length; i++) {
+        const note = state.notes[i];
+        if (note.lane !== laneIndex || note.hit) continue;
+
+        const diff = Math.abs(currentSongTime - note.time);
+        if (diff < minDiff) {
+          minDiff = diff;
+          candidate = note;
+        }
+
+        // Since notes are sorted by time, break early if note is far in future
+        if (note.time - currentSongTime > CONFIG.timingWindows.miss) {
+          break;
+        }
+      }
+
+      // Visual button feedback flash
+      triggerLaneVisual(laneIndex);
+
+      if (candidate && minDiff <= CONFIG.timingWindows.good) {
+        candidate.hit = true;
+        
+        let judgement = 'good';
+        let baseScore = 300;
+
+        if (minDiff <= CONFIG.timingWindows.perfect) {
+          judgement = 'perfect';
+          baseScore = 1000;
+          state.counts.perfect++;
+        } else if (minDiff <= CONFIG.timingWindows.great) {
+          judgement = 'great';
+          baseScore = 650;
+          state.counts.great++;
+        } else {
+          judgement = 'good';
+          baseScore = 350;
+          state.counts.good++;
+        }
+
+        state.combo++;
+        if (state.combo > state.maxCombo) state.maxCombo = state.combo;
+        state.score += baseScore + (state.combo * 25);
+
+        // Feedback
+        playHitSound(judgement);
+        showJudgementDisplay(judgement);
+        spawnHitParticles(getLaneX(laneIndex), CONFIG.targetZ, CONFIG.laneHexStrings[laneIndex]);
+
+        // Remove 3D mesh
+        if (candidate.mesh) {
+          scene.remove(candidate.mesh);
+          candidate.mesh = null;
+        }
+      } else {
+        // Missed or blank press
+        // Trigger subtle receptor clank
+      }
+
+      updateScoreHUD();
+    }
+
+    function triggerLaneVisual(laneIndex) {
+      const receptor = laneTargetMeshes[laneIndex];
+      if (receptor) {
+        receptor.material.emissiveIntensity = 2.0;
+        receptor.scale.set(1.08, 1.8, 1.15);
+      }
+
+      const touchEl = document.querySelector(`.lane-trigger[data-lane="${laneIndex}"]`);
+      if (touchEl) {
+        touchEl.classList.add('lane-active');
+        setTimeout(() => touchEl.classList.remove('lane-active'), 110);
+      }
+    }
+
+    function showJudgementDisplay(type) {
+      const el = document.getElementById('judgement-display');
+      const comboGroup = document.getElementById('combo-display-group');
+      const comboLarge = document.getElementById('combo-count-large');
+
+      el.className = 'absolute font-black font-hud text-3xl md:text-5xl tracking-widest uppercase animate-hit';
+      
+      if (type === 'perfect') {
+        el.textContent = 'PERFECT';
+        el.className += ' text-cyan-300 text-glow-cyan';
+      } else if (type === 'great') {
+        el.textContent = 'GREAT';
+        el.className += ' text-emerald-400 text-glow-cyan';
+      } else if (type === 'good') {
+        el.textContent = 'GOOD';
+        el.className += ' text-yellow-300 text-glow-gold';
+      } else {
+        el.textContent = 'MISS';
+        el.className += ' text-red-500';
+      }
+
+      if (state.combo > 1) {
+        comboGroup.style.opacity = '1';
+        comboLarge.textContent = state.combo;
+      } else {
+        comboGroup.style.opacity = '0';
+      }
+    }
+
+    function updateScoreHUD() {
+      const scoreStr = state.score.toString().padStart(7, '0');
+      document.getElementById('hud-score').textContent = scoreStr;
+      document.getElementById('hud-combo-counter').textContent = `${state.combo} COMBO`;
+
+      // Accuracy
+      const totalNotesProcessed = state.counts.perfect + state.counts.great + state.counts.good + state.counts.miss;
+      let acc = 100.0;
+      if (totalNotesProcessed > 0) {
+        const weighted = (state.counts.perfect * 100) + (state.counts.great * 80) + (state.counts.good * 50);
+        acc = (weighted / (totalNotesProcessed * 100)) * 100;
+      }
+      document.getElementById('hud-accuracy').textContent = `${acc.toFixed(1)}%`;
+    }
+
+    let lastFrameTime = performance.now();
+
+    function gameLoop(timestamp) {
+      requestAnimationFrame(gameLoop);
+
+      const dt = Math.min((timestamp - lastFrameTime) / 1000, 0.1);
+      lastFrameTime = timestamp;
+
+      // Update particle physics
+      updateParticles(dt);
+
+      // Smooth receptor relaxation
+      for (let i = 0; i < laneTargetMeshes.length; i++) {
+        const receptor = laneTargetMeshes[i];
+        receptor.material.emissiveIntensity = THREE.MathUtils.lerp(receptor.material.emissiveIntensity, 0.3, dt * 12);
+        receptor.scale.lerp(new THREE.Vector3(1, 1, 1), dt * 14);
+      }
+
+      if (state.isPlaying && state.audioCtx) {
+        const currentSongTime = state.audioCtx.currentTime - state.songStartTime;
+        const speed = CONFIG.noteSpeed * state.scrollMultiplier;
+
+        // Progress Bar
+        const progress = Math.min(Math.max(currentSongTime / state.songDuration, 0), 1);
+        document.getElementById('hud-progress-bar').style.width = `${(progress * 100).toFixed(1)}%`;
+        document.getElementById('hud-current-time').textContent = formatTime(Math.max(0, currentSongTime));
+
+        // Note Movement & Spawning based strictly on audioCtx time
+        for (let i = 0; i < state.notes.length; i++) {
+          const note = state.notes[i];
+          if (note.hit) continue;
+
+          // Time difference: positive = future note, 0 = at judgment line, negative = past judgment line
+          const timeDiff = note.time - currentSongTime;
+
+          // Compute exact Z position along track
+          const currentZ = CONFIG.targetZ - (timeDiff * speed);
+
+          // If note is within visible track range
+          if (currentZ >= CONFIG.spawnZ && currentZ <= CONFIG.targetZ + 3.0) {
+            if (!note.mesh) {
+              note.mesh = createNoteMesh(note.lane);
+              scene.add(note.mesh);
+            }
+            note.mesh.position.z = currentZ;
+          } else if (note.mesh && currentZ > CONFIG.targetZ + 3.0) {
+            // Remove mesh if far past
+            scene.remove(note.mesh);
+            note.mesh = null;
+          }
+
+          // Check Missed Note (Passed judgment line beyond miss threshold)
+          if (!note.hit && timeDiff < -CONFIG.timingWindows.miss) {
+            note.hit = true;
+            state.combo = 0;
+            state.counts.miss++;
+            playMissSound();
+            showJudgementDisplay('miss');
+            updateScoreHUD();
+
+            if (note.mesh) {
+              scene.remove(note.mesh);
+              note.mesh = null;
+            }
+          }
+        }
+      }
+
+      // Render 3D Scene
+      renderer.render(scene, camera);
+    }
+
+    function finishTrackAndShowResults() {
+      state.isPlaying = false;
+      if (state.audioSource) {
+        try { state.audioSource.stop(); } catch (e) {}
+      }
+
+      document.getElementById('game-hud').classList.add('opacity-0');
+      document.getElementById('results-modal').classList.remove('hidden');
+
+      const total = state.counts.perfect + state.counts.great + state.counts.good + state.counts.miss;
+      let acc = 100.0;
+      if (total > 0) {
+        const weighted = (state.counts.perfect * 100) + (state.counts.great * 80) + (state.counts.good * 50);
+        acc = (weighted / (total * 100)) * 100;
+      }
+
+      let rank = 'F';
+      if (acc >= 96 && state.counts.miss === 0) rank = 'SS';
+      else if (acc >= 93) rank = 'S';
+      else if (acc >= 85) rank = 'A';
+      else if (acc >= 75) rank = 'B';
+      else if (acc >= 60) rank = 'C';
+
+      document.getElementById('result-rank').textContent = rank;
+      document.getElementById('result-score').textContent = state.score.toLocaleString();
+      document.getElementById('result-max-combo').textContent = state.maxCombo;
+      document.getElementById('result-accuracy').textContent = `${acc.toFixed(1)}%`;
+      document.getElementById('result-perfect').textContent = state.counts.perfect;
+      document.getElementById('result-great').textContent = state.counts.great;
+      document.getElementById('result-good').textContent = state.counts.good;
+      document.getElementById('result-miss').textContent = state.counts.miss;
+    }
+
+    function setupInputHandlers() {
+      // 1. Desktop Keyboard Listeners (D, F, J, K)
+      window.addEventListener('keydown', (e) => {
+        if (e.repeat) return;
+        const keyIndex = CONFIG.keys.indexOf(e.code);
+        if (keyIndex !== -1) {
+          checkLaneHit(keyIndex);
+        }
+      });
+
+      // 2. Mobile & Mouse Touch Targets
+      const laneButtons = document.querySelectorAll('.lane-trigger');
+      laneButtons.forEach((btn) => {
+        const lane = parseInt(btn.getAttribute('data-lane'), 10);
+
+        // Touchstart listener for instantaneous mobile multi-touch
+        btn.addEventListener('touchstart', (e) => {
+          e.preventDefault();
+          checkLaneHit(lane);
+        }, { passive: false });
+
+        // Mouse click for desktop touch emulation
+        btn.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          checkLaneHit(lane);
+        });
+      });
+
+      // 3. Global Multi-touch Fallback across bottom viewport half
+      window.addEventListener('touchstart', (e) => {
+        // If touching bottom third of the screen outside specific buttons
+        const touch = e.changedTouches[0];
+        if (touch.clientY > window.innerHeight * 0.65 && !e.target.closest('.lane-trigger') && !e.target.closest('button')) {
+          const laneWidth = window.innerWidth / CONFIG.lanesCount;
+          const lane = Math.min(Math.floor(touch.clientX / laneWidth), 3);
+          checkLaneHit(lane);
+        }
+      }, { passive: true });
+    }
+
+    function setupMenuInteractions() {
+      const dropZone = document.getElementById('drop-zone');
+      const fileInput = document.getElementById('audio-file-input');
+      const btnPlayDemo = document.getElementById('btn-play-demo');
+      const speedSelect = document.getElementById('select-speed');
+      const sensitivitySelect = document.getElementById('select-sensitivity');
+      const btnAbort = document.getElementById('btn-abort-song');
+      const btnReplay = document.getElementById('btn-replay');
+      const btnReturnMenu = document.getElementById('btn-return-menu');
+
+      // Scroll speed modifier
+      speedSelect.addEventListener('change', (e) => {
+        state.scrollMultiplier = parseFloat(e.target.value);
+      });
+
+      // Beat sensitivity
+      sensitivitySelect.addEventListener('change', (e) => {
+        state.onsetSensitivity = e.target.value;
+      });
+
+      // File Click Trigger
+      dropZone.addEventListener('click', () => fileInput.click());
+
+      // File Input Change
+      fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) handleAudioFile(file);
+      });
+
+      // Drag and Drop
+      dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('border-cyan-300', 'bg-cyan-950/40');
+      });
+
+      dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('border-cyan-300', 'bg-cyan-950/40');
+      });
+
+      dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('border-cyan-300', 'bg-cyan-950/40');
+        const file = e.dataTransfer.files[0];
+        if (file && file.type.startsWith('audio/')) {
+          handleAudioFile(file);
+        } else {
+          showToast('Please provide a valid audio file (MP3/WAV/OGG).');
+        }
+      });
+
+      // Built-in Demo Anthem Button
+      btnPlayDemo.addEventListener('click', async () => {
+        const ctx = getAudioContext();
+        showLoadingModal('Synthesizing Anthem', 'Generating multi-layered retro synthwave track...');
+        await new Promise(r => setTimeout(r, 60));
+
+        const demoBuffer = generateDemoSynthwaveBuffer(ctx);
+        state.lastUploadedFile = null;
+        startRhythmGame(demoBuffer, 'Synthwave Anthem (Demo)');
+      });
+
+      // Abort In-Game
+      btnAbort.addEventListener('click', () => {
+        if (state.audioSource) {
+          try { state.audioSource.stop(); } catch (e) {}
+        }
+        state.isPlaying = false;
+        document.getElementById('game-hud').classList.add('opacity-0');
+        document.getElementById('menu-overlay').classList.remove('hidden');
+      });
+
+      // Replay
+      btnReplay.addEventListener('click', () => {
+        if (state.audioBuffer) {
+          startRhythmGame(state.audioBuffer, 'Track');
+        }
+      });
+
+      // Return to Menu
+      btnReturnMenu.addEventListener('click', () => {
+        document.getElementById('results-modal').classList.add('hidden');
+        document.getElementById('menu-overlay').classList.remove('hidden');
+      });
+    }
+
+    async function handleAudioFile(file) {
+      state.lastUploadedFile = file;
+      const fileNameEl = document.getElementById('selected-file-name');
+      fileNameEl.textContent = file.name;
+      fileNameEl.classList.remove('hidden');
+
+      showLoadingModal('Reading File', 'Decoding audio stream via Web Audio API...');
+      
+      const ctx = getAudioContext();
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const decodedBuffer = await ctx.decodeAudioData(arrayBuffer);
+        startRhythmGame(decodedBuffer, file.name);
+      } catch (err) {
+        hideLoadingModal();
+        console.error('Audio decode error:', err);
+        showToast('Error decoding audio. File might be corrupted.');
+      }
+    }
+
+    function showLoadingModal(title, desc) {
+      document.getElementById('loading-title').textContent = title;
+      document.getElementById('loading-desc').textContent = desc;
+      document.getElementById('loading-bar').style.width = '20%';
+      document.getElementById('loading-modal').classList.remove('hidden');
+    }
+
+    function updateLoadingUI(pct, desc) {
+      document.getElementById('loading-bar').style.width = `${pct}%`;
+      if (desc) document.getElementById('loading-desc').textContent = desc;
+    }
+
+    function hideLoadingModal() {
+      document.getElementById('loading-modal').classList.add('hidden');
+    }
+
+    function showToast(text) {
+      const toast = document.getElementById('toast-message');
+      toast.textContent = text;
+      toast.classList.remove('opacity-0', '-translate-y-16');
+      toast.classList.add('opacity-100', 'translate-y-0');
+      setTimeout(() => {
+        toast.classList.remove('opacity-100', 'translate-y-0');
+        toast.classList.add('opacity-0', '-translate-y-16');
+      }, 3000);
+    }
+
+    function formatTime(seconds) {
+      const m = Math.floor(seconds / 60);
+      const s = Math.floor(seconds % 60);
+      return `${m}:${s < 10 ? '0' : ''}${s}`;
+    }
+
+    window.onload = function() {
+      initThreeScene();
+      setupInputHandlers();
+      setupMenuInteractions();
+      requestAnimationFrame(gameLoop);
+    };
+  </script>
+</body>
+</html>
